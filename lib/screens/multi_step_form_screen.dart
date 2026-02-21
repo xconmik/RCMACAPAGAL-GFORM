@@ -30,6 +30,48 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
 
   static const List<String> _brands = ['CAMEL', 'WINSTON', 'MIGHTY'];
 
+  static const Map<String, List<String>> _branchMunicipalities = {
+    'Bulacan': ['Meycauayan', 'Marilao', 'Guiguinto', 'Bocaue', 'Balagtas'],
+    'DSO Talavera': ['Talavera', 'Guimba', 'Cuyapo', 'Lupao', 'Nampicuan'],
+    'DSO Tarlac': ['Tarlac City', 'Concepcion', 'Capas', 'Bamban', 'La Paz'],
+    'DSO Pampanga': ['San Fernando', 'Angeles', 'Mabalacat', 'Mexico', 'Apalit'],
+    'DSO Villasis': ['Villasis', 'Urdaneta', 'Rosales', 'Malasiqui', 'Santa Maria'],
+    'DSO Bantay': ['Bantay', 'Vigan', 'Santo Domingo', 'San Vicente', 'Caoayan'],
+  };
+
+  static const Map<String, List<String>> _municipalityBarangays = {
+    'Meycauayan': ['Calvario', 'Banga', 'Bayugo', 'Langka'],
+    'Marilao': ['Loma de Gato', 'Patubig', 'Prenza 1', 'Prenza 2'],
+    'Guiguinto': ['Tabang', 'Poblacion', 'Tuktukan', 'Cutcut'],
+    'Bocaue': ['Bundukan', 'Taal', 'Igulot', 'Antipona'],
+    'Balagtas': ['Borol 1st', 'Borol 2nd', 'Poblacion', 'Wawa'],
+    'Talavera': ['Bagong Sikat', 'Maestrang Kikay', 'Sampaloc', 'Bantug'],
+    'Guimba': ['Bunol', 'Cabaruan', 'Culong', 'Macamias'],
+    'Cuyapo': ['District I', 'District II', 'District III', 'District IV'],
+    'Lupao': ['Bagong Flores', 'San Pedro', 'Agupalo Weste', 'Namulandayan'],
+    'Nampicuan': ['Burgos', 'Luna', 'Poblacion East', 'Poblacion West'],
+    'Tarlac City': ['San Roque', 'Maliwalo', 'San Miguel', 'Tibag'],
+    'Concepcion': ['Alfonso', 'Caluluan', 'Parulung', 'San Nicolas Balas'],
+    'Capas': ['Santo Rosario', 'Dolores', 'Estrada', 'Cutcut 1st'],
+    'Bamban': ['Anupul', 'Lourdes', 'San Nicolas', 'San Vicente'],
+    'La Paz': ['Poblacion', 'San Isidro', 'Mayang', 'Matayumtayum'],
+    'San Fernando': ['San Agustin', 'San Jose', 'Calulut', 'Del Pilar'],
+    'Angeles': ['Pampang', 'Balibago', 'Cutcut', 'Pulung Maragul'],
+    'Mabalacat': ['Dau', 'Mawaque', 'San Francisco', 'Camachiles'],
+    'Mexico': ['Santo Rosario', 'San Jose Malino', 'Camuning', 'Acli'],
+    'Apalit': ['San Juan', 'Sampaloc', 'Balucuc', 'Capalangan'],
+    'Villasis': ['Bacag', 'Barangobong', 'Poblacion', 'Tombod'],
+    'Urdaneta': ['Nancayasan', 'Camantiles', 'Cabaruan', 'San Vicente'],
+    'Rosales': ['Carmen East', 'Coliling', 'Don Antonio Village', 'Poblacion'],
+    'Malasiqui': ['Aliaga', 'Bawer', 'Binalay', 'Payar'],
+    'Santa Maria': ['Nalvo', 'Samon', 'Poblacion East', 'Poblacion West'],
+    'Bantay': ['Ora East', 'Ora Centro', 'Quimmarayan', 'Taguiporo'],
+    'Vigan': ['Ayusan Norte', 'Pantay Daya', 'Paoa', 'Raois'],
+    'Santo Domingo': ['Baballasang', 'Poblacion', 'Masadag', 'Lussoc'],
+    'San Vicente': ['Poblacion', 'Bayubay Sur', 'Bingsang', 'Labuan'],
+    'Caoayan': ['Nansuagao', 'Poblacion', 'Puro', 'Nagyubuyuban'],
+  };
+
   static const List<String> _quantityOptions = [
     '0',
     '1',
@@ -51,7 +93,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
   final TextEditingController _fullNameController = TextEditingController();
   final TextEditingController _signageNameController = TextEditingController();
   final TextEditingController _storeOwnerController = TextEditingController();
-  final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _purokController = TextEditingController();
   final TextEditingController _signageOtherController = TextEditingController();
   final TextEditingController _awningOtherController = TextEditingController();
   final TextEditingController _flangeOtherController = TextEditingController();
@@ -61,6 +103,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
   bool _isUploadingBefore = false;
   bool _isUploadingAfter = false;
   bool _isUploadingCompletion = false;
+  String? _selectedMunicipality;
+  String? _selectedBarangay;
 
   @override
   void dispose() {
@@ -69,7 +113,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
     _outletCodeController.dispose();
     _signageNameController.dispose();
     _storeOwnerController.dispose();
-    _addressController.dispose();
+    _purokController.dispose();
     _signageOtherController.dispose();
     _awningOtherController.dispose();
     _flangeOtherController.dispose();
@@ -128,11 +172,26 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
         _formData.storeOwnerName = _storeOwnerController.text.trim();
         return true;
       case 5:
-        if (_addressController.text.trim().isEmpty) {
-          _showError('Complete address is required.');
+        if (_purokController.text.trim().isEmpty) {
+          _showError('Purok is required.');
           return false;
         }
-        _formData.completeAddress = _addressController.text.trim();
+
+        if (_selectedBarangay == null || _selectedBarangay!.isEmpty) {
+          _showError('Please select a barangay.');
+          return false;
+        }
+
+        if (_selectedMunicipality == null || _selectedMunicipality!.isEmpty) {
+          _showError('Please select a municipality.');
+          return false;
+        }
+
+        _formData.purok = _purokController.text.trim();
+        _formData.barangay = _selectedBarangay;
+        _formData.municipality = _selectedMunicipality;
+        _formData.completeAddress =
+            'Purok ${_formData.purok}, ${_formData.barangay}, ${_formData.municipality}';
         return true;
       case 6:
         if (_formData.brands.isEmpty) {
@@ -309,7 +368,9 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
     _outletCodeController.clear();
     _signageNameController.clear();
     _storeOwnerController.clear();
-    _addressController.clear();
+    _purokController.clear();
+    _selectedBarangay = null;
+    _selectedMunicipality = null;
     _signageOtherController.clear();
     _awningOtherController.clear();
     _flangeOtherController.clear();
@@ -400,6 +461,91 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
           ],
           const SizedBox(height: 20),
           PrimaryActionButton(label: 'CONFIRM', onPressed: _goNext),
+        ],
+      ),
+    );
+  }
+
+  List<String> _municipalityOptions() {
+    final branch = _formData.branch;
+    if (branch == null || branch.isEmpty) return const [];
+    return _branchMunicipalities[branch] ?? const [];
+  }
+
+  List<String> _barangayOptions() {
+    final municipality = _selectedMunicipality;
+    if (municipality != null && municipality.isNotEmpty) {
+      return _municipalityBarangays[municipality] ?? const [];
+    }
+
+    final branch = _formData.branch;
+    final municipalities = _branchMunicipalities[branch] ?? const <String>[];
+    final barangays = <String>{};
+
+    for (final item in municipalities) {
+      barangays.addAll(_municipalityBarangays[item] ?? const <String>[]);
+    }
+
+    return barangays.toList()..sort();
+  }
+
+  Widget _buildLocationStep() {
+    final municipalities = _municipalityOptions();
+    final barangays = _barangayOptions();
+
+    return StepCard(
+      title: 'LOCATION DETAILS',
+      child: Column(
+        children: [
+          TextField(
+            controller: _purokController,
+            decoration: InputDecoration(
+              hintText: 'Enter Purok',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _selectedBarangay,
+            decoration: InputDecoration(
+              hintText: 'Select Barangay',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            items: barangays
+                .map((barangay) => DropdownMenuItem(value: barangay, child: Text(barangay)))
+                .toList(),
+            onChanged: (value) {
+              setState(() {
+                _selectedBarangay = value;
+              });
+            },
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _selectedMunicipality,
+            decoration: InputDecoration(
+              hintText: 'Select Municipality',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            items: municipalities
+                .map((municipality) =>
+                    DropdownMenuItem(value: municipality, child: Text(municipality)))
+                .toList(),
+            onChanged: (value) {
+              setState(() {
+                _selectedMunicipality = value;
+                _selectedBarangay = null;
+              });
+            },
+          ),
+          const SizedBox(height: 20),
+          PrimaryActionButton(label: 'NEXT', onPressed: _goNext),
         ],
       ),
     );
@@ -541,6 +687,10 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
                           onChanged: (value) {
                             setState(() {
                               _formData.branch = value;
+                              _selectedMunicipality = null;
+                              _selectedBarangay = null;
+                              _formData.municipality = null;
+                              _formData.barangay = null;
                             });
                           },
                         ),
@@ -569,12 +719,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
                     controller: _storeOwnerController,
                     buttonLabel: 'NEXT',
                   ),
-                  _buildTextStep(
-                    title: 'COMPLETE ADDRESS',
-                    controller: _addressController,
-                    maxLines: 4,
-                    buttonLabel: 'NEXT',
-                  ),
+                  _buildLocationStep(),
                   StepCard(
                     title: 'BRAND SELECTION',
                     child: Column(

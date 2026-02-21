@@ -65,10 +65,9 @@ class UploadService {
       'capturedAt': imageData.capturedAt.toIso8601String(),
     };
 
-    final response = await http.post(
+    final response = await _postJsonHandlingRedirect(
       Uri.parse(ApiEndpoints.googleDriveUploadUrl),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(payload),
+      payload,
     );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -105,10 +104,9 @@ class UploadService {
       return;
     }
 
-    final response = await http.post(
+    final response = await _postJsonHandlingRedirect(
       Uri.parse(ApiEndpoints.googleSheetsSubmitUrl),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(payload),
+      payload,
     );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -116,5 +114,34 @@ class UploadService {
         'Google Sheets submit failed (${response.statusCode}): ${response.body}',
       );
     }
+  }
+
+  Future<http.Response> _postJsonHandlingRedirect(
+    Uri uri,
+    Map<String, dynamic> payload,
+  ) async {
+    var response = await http.post(
+      uri,
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode(payload),
+    );
+
+    if (_isRedirect(response.statusCode)) {
+      final location = response.headers['location'];
+      if (location != null && location.trim().isNotEmpty) {
+        final redirectedUri = Uri.parse(location);
+        response = await http.get(redirectedUri);
+      }
+    }
+
+    return response;
+  }
+
+  bool _isRedirect(int statusCode) {
+    return statusCode == HttpStatus.movedPermanently ||
+        statusCode == HttpStatus.found ||
+        statusCode == HttpStatus.seeOther ||
+        statusCode == HttpStatus.temporaryRedirect ||
+        statusCode == HttpStatus.permanentRedirect;
   }
 }

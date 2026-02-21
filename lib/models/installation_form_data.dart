@@ -6,6 +6,9 @@ class InstallationFormData {
   String? outletCode;
   String? signageName;
   String? storeOwnerName;
+  String? purok;
+  String? barangay;
+  String? municipality;
   String? completeAddress;
   List<String> brands = [];
   String? signageQuantity;
@@ -25,6 +28,9 @@ class InstallationFormData {
       'outletCode': outletCode,
       'signageName': signageName,
       'storeOwnerName': storeOwnerName,
+      'purok': purok,
+      'barangay': barangay,
+      'municipality': municipality,
       'completeAddress': completeAddress,
       'brands': brands,
       'signageQuantity': signageQuantity,
