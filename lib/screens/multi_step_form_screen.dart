@@ -272,6 +272,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
           );
         },
       );
+
+      await _resetFormToFirstStep();
     } catch (e) {
       await _localStorageService.saveDraft(_formData.toJson());
       if (!mounted) return;
@@ -283,6 +285,46 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
         });
       }
     }
+  }
+
+  Future<void> _resetFormToFirstStep() async {
+    _formData.branch = null;
+    _formData.fullName = null;
+    _formData.outletCode = null;
+    _formData.signageName = null;
+    _formData.storeOwnerName = null;
+    _formData.completeAddress = null;
+    _formData.brands.clear();
+    _formData.signageQuantity = null;
+    _formData.signageQuantityOther = null;
+    _formData.awningQuantity = null;
+    _formData.awningQuantityOther = null;
+    _formData.flangeQuantity = null;
+    _formData.flangeQuantityOther = null;
+    _formData.beforeImage = null;
+    _formData.afterImage = null;
+    _formData.completionImage = null;
+
+    _fullNameController.clear();
+    _outletCodeController.clear();
+    _signageNameController.clear();
+    _storeOwnerController.clear();
+    _addressController.clear();
+    _signageOtherController.clear();
+    _awningOtherController.clear();
+    _flangeOtherController.clear();
+
+    if (!mounted) return;
+
+    setState(() {
+      _currentStep = 0;
+    });
+
+    await _pageController.animateToPage(
+      0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+    );
   }
 
   void _showError(String message) {
