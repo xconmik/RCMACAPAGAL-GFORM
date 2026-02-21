@@ -39,4 +39,27 @@ class ApiEndpoints {
     final query = <String, String>{...uri.queryParameters, 'action': 'adminData'};
     return uri.replace(queryParameters: query).toString();
   }
+
+  static String get deleteEntryUrl {
+    final submitUrl = googleSheetsSubmitUrl.trim();
+    if (submitUrl.isNotEmpty) {
+      final submitUri = Uri.tryParse(submitUrl);
+      if (submitUri != null) {
+        final query = <String, String>{
+          ...submitUri.queryParameters,
+          'action': 'deleteEntry',
+        };
+        return submitUri.replace(queryParameters: query).toString();
+      }
+    }
+
+    final adminUrl = adminDataUrl.trim();
+    if (adminUrl.isEmpty) return '';
+
+    final adminUri = Uri.tryParse(adminUrl);
+    if (adminUri == null) return '';
+
+    final query = <String, String>{...adminUri.queryParameters, 'action': 'deleteEntry'};
+    return adminUri.replace(queryParameters: query).toString();
+  }
 }

@@ -42,6 +42,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   bool _isLoading = true;
   bool _isLoadingMore = false;
   String? _error;
+  final Set<String> _deletingEntryKeys = <String>{};
 
   int _currentLimit = 200;
 
@@ -680,15 +681,42 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final entry = submissions[index];
+        final entryKey = entry.entryId.isNotEmpty
+            ? entry.entryId
+            : '${entry.branch}:${entry.rowNumber ?? -1}:${entry.timestamp}';
+        final isDeleting = _deletingEntryKeys.contains(entryKey);
+        final canDelete = entry.rowNumber != null && entry.rowNumber! > 1;
 
         return Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                entry.outletCode.isEmpty ? '(No outlet code)' : entry.outletCode,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      entry.outletCode.isEmpty ? '(No outlet code)' : entry.outletCode,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: canDelete
+                        ? 'Delete this entry'
+                        : 'Cannot delete this entry',
+                    onPressed: !canDelete || isDeleting
+                        ? null
+                        : () => _confirmDeleteEntry(entry, entryKey),
+                    icon: isDeleting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.delete_outline),
+                    color: Colors.red,
+                  ),
+                ],
               ),
               const SizedBox(height: 6),
               Text('Timestamp: ${_formatEntryTimestamp(entry)}'),
@@ -699,11 +727,71 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               Text(
                 'Quantity - Signage: ${entry.signageQuantity}, Awnings: ${entry.awningQuantity}, Flange: ${entry.flangeQuantity}',
               ),
+              if (entry.rowNumber != null)
+                Text(
+                  'Sheet row: ${entry.rowNumber}',
+                  style: const TextStyle(color: Colors.black54, fontSize: 12),
+                ),
             ],
           ),
         );
       },
     );
+  }
+
+  Future<void> _confirmDeleteEntry(AdminSubmission entry, String entryKey) async {
+    final rowNumber = entry.rowNumber;
+    if (rowNumber == null || rowNumber <= 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to delete this entry. Missing row reference.')),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Entry'),
+        content: Text(
+          'Delete this entry for ${entry.outletCode.isEmpty ? 'this outlet' : entry.outletCode}? This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() {
+      _deletingEntryKeys.add(entryKey);
+    });
+
+    try {
+      await _adminService.deleteEntry(branch: entry.branch, rowNumber: rowNumber);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Entry deleted successfully.')),
+      );
+      await _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Delete failed: $e')),
+      );
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _deletingEntryKeys.remove(entryKey);
+      });
+    }
   }
 
   Widget _buildSubmissionTable(List<AdminSubmission> submissions) {

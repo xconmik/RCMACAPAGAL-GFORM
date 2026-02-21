@@ -29,13 +29,49 @@ function doPost(e) {
       return _handleSubmitForm(e);
     }
 
+    if (action === 'deleteEntry') {
+      return _handleDeleteEntry(e);
+    }
+
     return _jsonResponse({
       success: false,
-      error: 'Unknown action. Use uploadImage or submitForm.',
+      error: 'Unknown action. Use uploadImage, submitForm, or deleteEntry.',
     }, 400);
   } catch (error) {
     return _jsonResponse({ success: false, error: String(error) }, 500);
   }
+}
+
+function _handleDeleteEntry(e) {
+  const payload = _parseJsonBody(e);
+  const branchName = _string(payload.branch);
+  const rowNumber = _toInt(payload.rowNumber, -1);
+
+  if (!branchName) {
+    throw new Error('Missing required field: branch');
+  }
+
+  if (rowNumber <= 1) {
+    throw new Error('Invalid row number for deletion.');
+  }
+
+  const spreadsheetId = _resolveSpreadsheetIdForBranch(branchName);
+  const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+  const sheet = _getOrCreateSheet(spreadsheet, CONFIG.SHEET_NAME);
+
+  if (rowNumber > sheet.getLastRow()) {
+    throw new Error('Row number does not exist.');
+  }
+
+  sheet.deleteRow(rowNumber);
+
+  return _jsonResponse({
+    success: true,
+    message: 'Entry deleted.',
+    branch: branchName,
+    rowNumber: rowNumber,
+    scriptTimestamp: _toIsoString(new Date()),
+  }, 200);
 }
 
 function doGet(e) {
@@ -200,7 +236,7 @@ function _buildBranchSummary(branchName, spreadsheetId, sheet, limit) {
   const values = sheet.getRange(startRow, 1, count, 21).getValues();
 
   const mappedRows = values
-    .map((row) => _mapSheetRowToSubmission(branchName, row))
+    .map((row, index) => _mapSheetRowToSubmission(branchName, spreadsheetId, row, startRow + index))
     .filter((row) => row.timestamp);
 
   return {
@@ -213,11 +249,14 @@ function _buildBranchSummary(branchName, spreadsheetId, sheet, limit) {
   };
 }
 
-function _mapSheetRowToSubmission(branchName, row) {
+function _mapSheetRowToSubmission(branchName, spreadsheetId, row, rowNumber) {
   const scriptTimestamp = _toIsoString(row[0]);
   const rawPayload = _parseRawPayload(row[20]);
 
   return {
+    rowNumber: rowNumber,
+    spreadsheetId: spreadsheetId,
+    entryId: spreadsheetId + ':' + String(rowNumber),
     timestamp: scriptTimestamp,
     scriptTimestamp: scriptTimestamp,
     branch: branchName,

@@ -20,6 +20,9 @@ class BranchSummary {
 
 class AdminSubmission {
   const AdminSubmission({
+    required this.entryId,
+    required this.spreadsheetId,
+    required this.rowNumber,
     required this.timestamp,
     required this.scriptTimestamp,
     required this.submittedAt,
@@ -37,6 +40,9 @@ class AdminSubmission {
     required this.completionImageDriveUrl,
   });
 
+  final String entryId;
+  final String spreadsheetId;
+  final int? rowNumber;
   final String timestamp;
   final String scriptTimestamp;
   final String submittedAt;
@@ -55,6 +61,9 @@ class AdminSubmission {
 
   factory AdminSubmission.fromJson(Map<String, dynamic> json) {
     return AdminSubmission(
+      entryId: (json['entryId'] ?? '').toString(),
+      spreadsheetId: (json['spreadsheetId'] ?? '').toString(),
+      rowNumber: int.tryParse((json['rowNumber'] ?? '').toString()),
       timestamp: (json['timestamp'] ?? '').toString(),
       scriptTimestamp: (json['scriptTimestamp'] ?? json['timestamp'] ?? '')
           .toString(),
