@@ -10,9 +10,11 @@ class ImageCaptureService {
   final LocationService _locationService;
   final ImagePicker _picker = ImagePicker();
 
-  Future<CapturedImageData?> captureWithGps() async {
+  Future<CapturedImageData?> captureWithGps({
+    ImageSource source = ImageSource.camera,
+  }) async {
     final pickedFile = await _picker.pickImage(
-      source: ImageSource.camera,
+      source: source,
       imageQuality: 80,
     );
 

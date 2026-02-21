@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../models/captured_image_data.dart';
 import '../models/installation_form_data.dart';
@@ -100,7 +101,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
         return true;
       case 1:
         if (_fullNameController.text.trim().isEmpty) {
-          _showError('Full name is required.');
+          _showError('Installer name is required.');
           return false;
         }
         _formData.fullName = _fullNameController.text.trim();
@@ -195,7 +196,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
     }
   }
 
-  Future<void> _captureImage(String imageType) async {
+  Future<void> _captureImage(String imageType, ImageSource source) async {
     try {
       setState(() {
         if (imageType == 'before') _isUploadingBefore = true;
@@ -203,7 +204,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
         if (imageType == 'completion') _isUploadingCompletion = true;
       });
 
-      final imageData = await _imageCaptureService.captureWithGps();
+      final imageData = await _imageCaptureService.captureWithGps(source: source);
       if (!mounted || imageData == null) return;
 
       setState(() {
@@ -366,7 +367,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
     required String title,
     required CapturedImageData? imageData,
     required bool isUploading,
-    required VoidCallback onUpload,
+    required VoidCallback onCameraUpload,
+    required VoidCallback onAlbumUpload,
   }) {
     return Card(
       elevation: 0,
@@ -401,10 +403,30 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
                   : 'GPS: ${imageData.latitude.toStringAsFixed(6)}, ${imageData.longitude.toStringAsFixed(6)}',
             ),
             const SizedBox(height: 10),
-            PrimaryActionButton(
-              label: 'UPLOAD IMAGE',
-              onPressed: onUpload,
-              isLoading: isUploading,
+            SizedBox(
+              width: double.infinity,
+              child: Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  SizedBox(
+                    width: 220,
+                    child: PrimaryActionButton(
+                      label: 'USE CAMERA',
+                      onPressed: onCameraUpload,
+                      isLoading: isUploading,
+                    ),
+                  ),
+                  SizedBox(
+                    width: 220,
+                    child: PrimaryActionButton(
+                      label: 'UPLOAD FROM ALBUM',
+                      onPressed: onAlbumUpload,
+                      isLoading: isUploading,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -415,6 +437,9 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
   @override
   Widget build(BuildContext context) {
     final progressText = 'Step ${_currentStep + 1} of 11';
+    final branchLabel = _formData.branch?.trim().isNotEmpty == true
+        ? _formData.branch!
+        : 'Not selected';
 
     return Scaffold(
       appBar: AppBar(
@@ -430,6 +455,19 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
                 child: Text(
                   progressText,
                   style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Branch: $branchLabel',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black54,
+                  ),
                 ),
               ),
             ),
@@ -470,7 +508,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
                     ),
                   ),
                   _buildTextStep(
-                    title: 'FULL NAME',
+                    title: 'INSTALLER NAME',
                     controller: _fullNameController,
                     buttonLabel: 'NEXT',
                   ),
@@ -598,21 +636,30 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
                             title: 'BEFORE (WITH GPS)',
                             imageData: _formData.beforeImage,
                             isUploading: _isUploadingBefore,
-                            onUpload: () => _captureImage('before'),
+                            onCameraUpload: () =>
+                                _captureImage('before', ImageSource.camera),
+                            onAlbumUpload: () =>
+                                _captureImage('before', ImageSource.gallery),
                           ),
                           const SizedBox(height: 12),
                           _buildUploadSection(
                             title: 'AFTER (WITH GPS)',
                             imageData: _formData.afterImage,
                             isUploading: _isUploadingAfter,
-                            onUpload: () => _captureImage('after'),
+                            onCameraUpload: () =>
+                                _captureImage('after', ImageSource.camera),
+                            onAlbumUpload: () =>
+                                _captureImage('after', ImageSource.gallery),
                           ),
                           const SizedBox(height: 12),
                           _buildUploadSection(
                             title: 'COMPLETION FORM',
                             imageData: _formData.completionImage,
                             isUploading: _isUploadingCompletion,
-                            onUpload: () => _captureImage('completion'),
+                            onCameraUpload: () =>
+                                _captureImage('completion', ImageSource.camera),
+                            onAlbumUpload: () =>
+                                _captureImage('completion', ImageSource.gallery),
                           ),
                           const SizedBox(height: 16),
                           PrimaryActionButton(
