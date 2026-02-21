@@ -1,23 +1,38 @@
 class ApiEndpoints {
-  static const String googleDriveUploadUrl = String.fromEnvironment(
+  static const String _defaultWebAppUrl =
+      'https://script.google.com/macros/s/AKfycbykMQ12f_UbpOJR5DLCZWfhy9Zud-4Gz0CIoHNl9QP3pQrY06yqaRU2HqlgKvEWReHh/exec';
+
+  static const String _googleDriveUploadUrlEnv = String.fromEnvironment(
     'GDRIVE_UPLOAD_URL',
     defaultValue: '',
   );
 
-  static const String googleSheetsSubmitUrl = String.fromEnvironment(
+  static const String _googleSheetsSubmitUrlEnv = String.fromEnvironment(
     'GSHEETS_SUBMIT_URL',
     defaultValue: '',
   );
 
   static const String googleDriveUploadMode = String.fromEnvironment(
     'GDRIVE_UPLOAD_MODE',
-    defaultValue: 'multipart',
+    defaultValue: 'apps_script',
   );
 
-  static const String adminDataUrlOverride = String.fromEnvironment(
+  static const String _adminDataUrlOverrideEnv = String.fromEnvironment(
     'ADMIN_DATA_URL',
     defaultValue: '',
   );
+
+  static String get googleDriveUploadUrl {
+    final env = _googleDriveUploadUrlEnv.trim();
+    if (env.isNotEmpty) return _withAction(env, 'uploadImage');
+    return _withAction(_defaultWebAppUrl, 'uploadImage');
+  }
+
+  static String get googleSheetsSubmitUrl {
+    final env = _googleSheetsSubmitUrlEnv.trim();
+    if (env.isNotEmpty) return _withAction(env, 'submitForm');
+    return _withAction(_defaultWebAppUrl, 'submitForm');
+  }
 
   static bool get hasDriveEndpoint => googleDriveUploadUrl.trim().isNotEmpty;
 
@@ -27,17 +42,12 @@ class ApiEndpoints {
       googleDriveUploadMode.trim().toLowerCase() == 'apps_script';
 
   static String get adminDataUrl {
-    final override = adminDataUrlOverride.trim();
-    if (override.isNotEmpty) return override;
+    final override = _adminDataUrlOverrideEnv.trim();
+    if (override.isNotEmpty) return _withAction(override, 'adminData');
 
     final submitUrl = googleSheetsSubmitUrl.trim();
     if (submitUrl.isEmpty) return '';
-
-    final uri = Uri.tryParse(submitUrl);
-    if (uri == null) return '';
-
-    final query = <String, String>{...uri.queryParameters, 'action': 'adminData'};
-    return uri.replace(queryParameters: query).toString();
+    return _withAction(submitUrl, 'adminData');
   }
 
   static String get deleteEntryUrl {
@@ -45,11 +55,7 @@ class ApiEndpoints {
     if (submitUrl.isNotEmpty) {
       final submitUri = Uri.tryParse(submitUrl);
       if (submitUri != null) {
-        final query = <String, String>{
-          ...submitUri.queryParameters,
-          'action': 'deleteEntry',
-        };
-        return submitUri.replace(queryParameters: query).toString();
+        return _withAction(submitUri.toString(), 'deleteEntry');
       }
     }
 
@@ -59,7 +65,13 @@ class ApiEndpoints {
     final adminUri = Uri.tryParse(adminUrl);
     if (adminUri == null) return '';
 
-    final query = <String, String>{...adminUri.queryParameters, 'action': 'deleteEntry'};
-    return adminUri.replace(queryParameters: query).toString();
+    return _withAction(adminUri.toString(), 'deleteEntry');
+  }
+
+  static String _withAction(String url, String action) {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null) return url;
+    final query = <String, String>{...uri.queryParameters, 'action': action};
+    return uri.replace(queryParameters: query).toString();
   }
 }
