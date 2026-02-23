@@ -8,6 +8,9 @@ import 'api_endpoints.dart';
 import '../models/captured_image_data.dart';
 
 class UploadService {
+  static const Duration _requestTimeout = Duration(seconds: 60);
+  static const Duration _uploadTimeout = Duration(seconds: 120);
+
   Future<String> uploadImageToGoogleDrive(CapturedImageData imageData) async {
     if (!ApiEndpoints.hasDriveEndpoint) {
       await Future.delayed(const Duration(seconds: 1));
@@ -30,8 +33,9 @@ class UploadService {
       await http.MultipartFile.fromPath('image', imageData.filePath),
     );
 
-    final streamedResponse = await request.send();
-    final response = await http.Response.fromStream(streamedResponse);
+    final streamedResponse = await request.send().timeout(_uploadTimeout);
+    final response = await http.Response.fromStream(streamedResponse)
+      .timeout(_uploadTimeout);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(
@@ -39,7 +43,7 @@ class UploadService {
       );
     }
 
-    final decoded = jsonDecode(response.body);
+    final decoded = _tryDecodeJson(response.body);
     if (decoded is Map<String, dynamic>) {
       final fileUrl = decoded['fileUrl'] ?? decoded['url'] ?? decoded['driveUrl'];
       if (fileUrl is String && fileUrl.trim().isNotEmpty) {
@@ -76,7 +80,7 @@ class UploadService {
       );
     }
 
-    final decoded = jsonDecode(response.body);
+    final decoded = _tryDecodeJson(response.body);
     if (decoded is Map<String, dynamic>) {
       final fileUrl = decoded['fileUrl'] ?? decoded['url'] ?? decoded['driveUrl'];
       if (fileUrl is String && fileUrl.trim().isNotEmpty) {
@@ -120,21 +124,35 @@ class UploadService {
     Uri uri,
     Map<String, dynamic> payload,
   ) async {
-    var response = await http.post(
-      uri,
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode(payload),
-    );
+    try {
+      var response = await http
+          .post(
+            uri,
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(_requestTimeout);
 
-    if (_isRedirect(response.statusCode)) {
-      final location = response.headers['location'];
-      if (location != null && location.trim().isNotEmpty) {
-        final redirectedUri = Uri.parse(location);
-        response = await http.get(redirectedUri);
+      if (_isRedirect(response.statusCode)) {
+        final location = response.headers['location'];
+        if (location != null && location.trim().isNotEmpty) {
+          final redirectedUri = Uri.parse(location);
+          response = await http.get(redirectedUri).timeout(_requestTimeout);
+        }
       }
-    }
 
-    return response;
+      return response;
+    } on TimeoutException {
+      throw Exception('Request timed out. Please check internet connection and try again.');
+    }
+  }
+
+  dynamic _tryDecodeJson(String responseBody) {
+    try {
+      return jsonDecode(responseBody);
+    } catch (_) {
+      return null;
+    }
   }
 
   bool _isRedirect(int statusCode) {

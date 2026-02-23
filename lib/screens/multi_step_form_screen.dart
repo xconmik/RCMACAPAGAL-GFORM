@@ -127,7 +127,11 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
       setState(() {
         _currentStep += 1;
       });
-      _pageController.jumpToPage(_currentStep);
+      await _pageController.animateToPage(
+        _currentStep,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeInOut,
+      );
     }
   }
 
@@ -381,7 +385,11 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
       _currentStep = 0;
     });
 
-    _pageController.jumpToPage(0);
+    await _pageController.animateToPage(
+      0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+    );
   }
 
   void _showError(String message) {
