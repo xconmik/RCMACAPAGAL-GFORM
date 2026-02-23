@@ -127,11 +127,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
       setState(() {
         _currentStep += 1;
       });
-      await _pageController.animateToPage(
-        _currentStep,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeInOut,
-      );
+      _pageController.jumpToPage(_currentStep);
     }
   }
 
@@ -172,8 +168,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
         _formData.storeOwnerName = _storeOwnerController.text.trim();
         return true;
       case 5:
-        if (_purokController.text.trim().isEmpty) {
-          _showError('Purok is required.');
+        if (_selectedMunicipality == null || _selectedMunicipality!.isEmpty) {
+          _showError('Please select a municipality.');
           return false;
         }
 
@@ -182,8 +178,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
           return false;
         }
 
-        if (_selectedMunicipality == null || _selectedMunicipality!.isEmpty) {
-          _showError('Please select a municipality.');
+        if (_purokController.text.trim().isEmpty) {
+          _showError('Purok is required.');
           return false;
         }
 
@@ -263,7 +259,11 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
         if (imageType == 'completion') _isUploadingCompletion = true;
       });
 
-      final imageData = await _imageCaptureService.captureWithGps(source: source);
+      final imageData = await _imageCaptureService.captureWithGps(
+        source: source,
+        installerName: _formData.fullName,
+        completeAddress: _formData.completeAddress,
+      );
       if (!mounted || imageData == null) return;
 
       setState(() {
@@ -381,11 +381,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
       _currentStep = 0;
     });
 
-    await _pageController.animateToPage(
-      0,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeInOut,
-    );
+    _pageController.jumpToPage(0);
   }
 
   void _showError(String message) {
@@ -467,9 +463,13 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
   }
 
   List<String> _municipalityOptions() {
-    final branch = _formData.branch;
-    if (branch == null || branch.isEmpty) return const [];
-    return _branchMunicipalities[branch] ?? const [];
+    final municipalities = <String>{};
+
+    for (final items in _branchMunicipalities.values) {
+      municipalities.addAll(items);
+    }
+
+    return municipalities.toList()..sort();
   }
 
   List<String> _barangayOptions() {
@@ -478,11 +478,9 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
       return _municipalityBarangays[municipality] ?? const [];
     }
 
-    final branch = _formData.branch;
-    final municipalities = _branchMunicipalities[branch] ?? const <String>[];
     final barangays = <String>{};
 
-    for (final item in municipalities) {
+    for (final item in _municipalityOptions()) {
       barangays.addAll(_municipalityBarangays[item] ?? const <String>[]);
     }
 
@@ -497,14 +495,24 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
       title: 'LOCATION DETAILS',
       child: Column(
         children: [
-          TextField(
-            controller: _purokController,
+          DropdownButtonFormField<String>(
+            initialValue: _selectedMunicipality,
             decoration: InputDecoration(
-              hintText: 'Enter Purok',
+              hintText: 'Select Municipality',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
             ),
+            items: municipalities
+                .map((municipality) =>
+                    DropdownMenuItem(value: municipality, child: Text(municipality)))
+                .toList(),
+            onChanged: (value) {
+              setState(() {
+                _selectedMunicipality = value;
+                _selectedBarangay = null;
+              });
+            },
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
@@ -525,24 +533,14 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
             },
           ),
           const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _selectedMunicipality,
+          TextField(
+            controller: _purokController,
             decoration: InputDecoration(
-              hintText: 'Select Municipality',
+              hintText: 'Enter Purok',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
             ),
-            items: municipalities
-                .map((municipality) =>
-                    DropdownMenuItem(value: municipality, child: Text(municipality)))
-                .toList(),
-            onChanged: (value) {
-              setState(() {
-                _selectedMunicipality = value;
-                _selectedBarangay = null;
-              });
-            },
           ),
           const SizedBox(height: 20),
           PrimaryActionButton(label: 'NEXT', onPressed: _goNext),

@@ -20,7 +20,7 @@ For a ready-to-deploy Google Apps Script backend (Drive upload + Sheets append),
 ```bash
 flutter run \
 	--dart-define=GDRIVE_UPLOAD_MODE=apps_script \
-	--dart-define=GDRIVE_UPLOAD_URL=https://script.google.com/macros/s/AKfycbykMQ12f_UbpOJR5DLCZWfhy9Zud-4Gz0CIoHNl9QP3pQrY06yqaRU2HqlgKvEWReHh/exec?action=uploadImage \
-	--dart-define=GSHEETS_SUBMIT_URL=https://script.google.com/macros/s/AKfycbykMQ12f_UbpOJR5DLCZWfhy9Zud-4Gz0CIoHNl9QP3pQrY06yqaRU2HqlgKvEWReHh/exec?action=submitForm \
-	--dart-define=ADMIN_DATA_URL=https://script.google.com/macros/s/AKfycbykMQ12f_UbpOJR5DLCZWfhy9Zud-4Gz0CIoHNl9QP3pQrY06yqaRU2HqlgKvEWReHh/exec?action=adminData
+	--dart-define=GDRIVE_UPLOAD_URL=https://script.google.com/macros/s/AKfycbxKq50oJiSVKWOudPh1Do9leh0_MetObyu4s5xqK5sVRfmD-EvuraVbKVog0WMdY6trUg/exec?action=uploadImage \
+	--dart-define=GSHEETS_SUBMIT_URL=https://script.google.com/macros/s/AKfycbxKq50oJiSVKWOudPh1Do9leh0_MetObyu4s5xqK5sVRfmD-EvuraVbKVog0WMdY6trUg/exec?action=submitForm \
+	--dart-define=ADMIN_DATA_URL=https://script.google.com/macros/s/AKfycbxKq50oJiSVKWOudPh1Do9leh0_MetObyu4s5xqK5sVRfmD-EvuraVbKVog0WMdY6trUg/exec?action=adminData
 ```

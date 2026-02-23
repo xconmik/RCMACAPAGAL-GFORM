@@ -66,7 +66,7 @@ class AdminService {
 
     final response = await http.post(
       uri,
-      headers: const {'Content-Type': 'application/json'},
+      headers: const {'Content-Type': 'text/plain;charset=UTF-8'},
       body: jsonEncode({
         'branch': branch,
         'rowNumber': rowNumber,

@@ -5,7 +5,7 @@ import '../models/admin_data.dart';
 import '../services/admin_service.dart';
 import '../services/allocation_service.dart';
 
-enum _AdminMenu { dashboard, entries, allocations }
+enum _AdminMenu { dashboard, entries, allocations, encoderArea }
 enum _HistoryRange { last7Days, last30Days, all }
 
 class AdminPanelScreen extends StatefulWidget {
@@ -31,6 +31,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   final AdminService _adminService = AdminService();
   final AllocationService _allocationService = AllocationService();
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _allocationAllController = TextEditingController();
   final Map<String, TextEditingController> _allocationControllers = {};
 
   _AdminMenu _activeMenu = _AdminMenu.dashboard;
@@ -41,6 +42,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
   bool _isLoading = true;
   bool _isLoadingMore = false;
+  bool _isAllocationEditLocked = false;
   String? _error;
   final Set<String> _deletingEntryKeys = <String>{};
 
@@ -61,6 +63,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _allocationAllController.dispose();
     for (final controller in _allocationControllers.values) {
       controller.dispose();
     }
@@ -188,11 +191,71 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   }
 
   Future<void> _saveAllocations() async {
+    _syncAllocationsFromControllers();
     await _allocationService.saveAllocations(_allocations);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Allocation saved.')),
     );
+  }
+
+  Future<void> _saveAllocationsAndLock() async {
+    await _saveAllocations();
+    if (!mounted) return;
+    setState(() {
+      _isAllocationEditLocked = true;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Allocation saved and locked.')),
+    );
+  }
+
+  void _syncAllocationsFromControllers() {
+    for (final entry in _allocationControllers.entries) {
+      final keyParts = entry.key.split('|');
+      if (keyParts.length != 2) continue;
+
+      final branch = keyParts[0];
+      final brand = keyParts[1];
+      final value = int.tryParse(entry.value.text.trim()) ?? 0;
+
+      _allocations[branch] ??= <String, int>{};
+      _allocations[branch]![brand] = value;
+    }
+  }
+
+  void _applyAllocationToAll() {
+    final value = int.tryParse(_allocationAllController.text.trim());
+    if (value == null || value < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid non-negative number for all allocation.')),
+      );
+      return;
+    }
+
+    for (final branch in _allocations.keys) {
+      _allocations[branch] ??= <String, int>{};
+      for (final brand in _brandOptions) {
+        _allocations[branch]![brand] = value;
+        final key = '$branch|$brand';
+        final text = value == 0 ? '' : '$value';
+        if (_allocationControllers.containsKey(key)) {
+          _allocationControllers[key]!.text = text;
+        } else {
+          _allocationControllers[key] = TextEditingController(text: text);
+        }
+      }
+    }
+
+    setState(() {
+      _isAllocationEditLocked = true;
+    });
+  }
+
+  void _enableAllocationEdit() {
+    setState(() {
+      _isAllocationEditLocked = false;
+    });
   }
 
   @override
@@ -222,6 +285,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               _menuTile('Dashboard', _AdminMenu.dashboard),
               _menuTile('Branch Entries', _AdminMenu.entries),
               _menuTile('Allocations', _AdminMenu.allocations),
+              _menuTile('ENCODER AREA', _AdminMenu.encoderArea),
             ],
           ),
         ),
@@ -357,6 +421,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         return _buildEntriesView(dashboard);
       case _AdminMenu.allocations:
         return _buildAllocationsView(dashboard);
+      case _AdminMenu.encoderArea:
+        return _buildEncoderAreaView(dashboard);
     }
   }
 
@@ -499,15 +565,56 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 8),
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                SizedBox(
+                  width: 220,
+                  child: TextField(
+                    controller: _allocationAllController,
+                    keyboardType: TextInputType.number,
+                    enabled: !_isAllocationEditLocked,
+                    decoration: const InputDecoration(
+                      labelText: 'Allocation for all',
+                      hintText: 'e.g. 100',
+                    ),
+                  ),
+                ),
+                FilledButton.icon(
+                  onPressed: _isAllocationEditLocked ? null : _applyAllocationToAll,
+                  icon: const Icon(Icons.lock_outline),
+                  label: const Text('Apply All & Lock'),
+                ),
+                FilledButton.icon(
+                  onPressed: _saveAllocationsAndLock,
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Text('Save Allocation & Lock'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _isAllocationEditLocked ? _enableAllocationEdit : null,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Enable Edit'),
+                ),
+                Text(
+                  _isAllocationEditLocked ? 'Status: Locked' : 'Status: Editable',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: _isAllocationEditLocked ? Colors.orange.shade800 : Colors.green.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
         ...branchOptions.map((branch) {
-          final totalTarget = _brandOptions
-              .map((brand) => _allocations[branch]?[brand] ?? 0)
-              .fold<int>(0, (sum, value) => sum + value);
-          final totalInstalled = _brandOptions
-              .map((brand) => actual[branch]?[brand] ?? 0)
-              .fold<int>(0, (sum, value) => sum + value);
-          final totalRemaining = totalTarget - totalInstalled;
-
           return Card(
             elevation: 0,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -519,22 +626,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                   Text(branch,
                       style:
                           const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _miniStat('Total Allocation', '$totalTarget'),
-                      _miniStat('Total Installed', '$totalInstalled'),
-                      _miniStat(
-                        'Total Remaining',
-                        '$totalRemaining',
-                        valueColor: totalRemaining < 0
-                            ? Colors.red
-                            : Colors.green.shade700,
-                      ),
-                    ],
-                  ),
                   const SizedBox(height: 8),
                   ..._brandOptions.map((brand) {
                     final key = '$branch|$brand';
@@ -559,13 +650,16 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                             child: TextField(
                               controller: controller,
                               keyboardType: TextInputType.number,
+                              enabled: !_isAllocationEditLocked,
                               decoration: const InputDecoration(
                                 labelText: 'Allocation',
                               ),
                               onChanged: (value) {
                                 final parsed = int.tryParse(value.trim()) ?? 0;
-                                _allocations[branch] ??= {};
-                                _allocations[branch]![brand] = parsed;
+                                setState(() {
+                                  _allocations[branch] ??= {};
+                                  _allocations[branch]![brand] = parsed;
+                                });
                               },
                             ),
                           ),
@@ -590,15 +684,135 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             ),
           );
         }),
-        const SizedBox(height: 12),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: FilledButton.icon(
-            onPressed: _saveAllocations,
-            icon: const Icon(Icons.save_outlined),
-            label: const Text('Save Allocation'),
-          ),
+      ],
+    );
+  }
+
+  Widget _buildEncoderAreaView(AdminDashboardData dashboard) {
+    final branchOptions = _branchOptions(includeAll: false);
+    final stats = _computeEncoderStats(dashboard.recentSubmissions);
+    final branchesToShow = _selectedBranch == 'ALL'
+        ? branchOptions
+        : branchOptions.where((branch) => branch == _selectedBranch).toList();
+
+    if (branchesToShow.isEmpty) {
+      return const Center(child: Text('No encoder data available.'));
+    }
+
+    return ListView(
+      children: [
+        const Text(
+          'Encoder Area',
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
         ),
+        const SizedBox(height: 8),
+        ...branchesToShow.map((branch) {
+          final branchStats = stats[branch] ?? _emptyEncoderStats();
+
+          final totalAllocation = _brandOptions
+              .map((brand) => _allocations[branch]?[brand] ?? 0)
+              .fold<int>(0, (sum, value) => sum + value);
+          final totalInstalled = _brandOptions
+              .map((brand) => branchStats[brand]?.installedCount ?? 0)
+              .fold<int>(0, (sum, value) => sum + value);
+          final totalBalance = totalAllocation - totalInstalled;
+
+          final totalSignage = _brandOptions
+              .map((brand) => branchStats[brand]?.signageTotal ?? 0)
+              .fold<int>(0, (sum, value) => sum + value);
+          final totalAwning = _brandOptions
+              .map((brand) => branchStats[brand]?.awningTotal ?? 0)
+              .fold<int>(0, (sum, value) => sum + value);
+          final totalFlange = _brandOptions
+              .map((brand) => branchStats[brand]?.flangeTotal ?? 0)
+              .fold<int>(0, (sum, value) => sum + value);
+
+          final dailySignage = _brandOptions
+              .map((brand) => branchStats[brand]?.dailySignage ?? 0)
+              .fold<int>(0, (sum, value) => sum + value);
+          final dailyAwning = _brandOptions
+              .map((brand) => branchStats[brand]?.dailyAwning ?? 0)
+              .fold<int>(0, (sum, value) => sum + value);
+          final dailyFlange = _brandOptions
+              .map((brand) => branchStats[brand]?.dailyFlange ?? 0)
+              .fold<int>(0, (sum, value) => sum + value);
+
+          return Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    branch,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _miniStat('Total Allocation', '$totalAllocation'),
+                      _miniStat('Total Installed', '$totalInstalled'),
+                      _miniStat(
+                        'Total Balance',
+                        '$totalBalance',
+                        valueColor: totalBalance < 0 ? Colors.red : Colors.green.shade700,
+                      ),
+                      _miniStat('Total Qty Signage', '$totalSignage'),
+                      _miniStat('Total Qty Awning', '$totalAwning'),
+                      _miniStat('Total Qty Flange', '$totalFlange'),
+                      _miniStat('Daily Signage', '$dailySignage'),
+                      _miniStat('Daily Awning', '$dailyAwning'),
+                      _miniStat('Daily Flange', '$dailyFlange'),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      headingTextStyle: const TextStyle(fontWeight: FontWeight.w800),
+                      columns: const [
+                        DataColumn(label: Text('Brand')),
+                        DataColumn(label: Text('Allocation')),
+                        DataColumn(label: Text('Installed')),
+                        DataColumn(label: Text('Balance')),
+                        DataColumn(label: Text('Qty Signage')),
+                        DataColumn(label: Text('Qty Awning')),
+                        DataColumn(label: Text('Qty Flange')),
+                        DataColumn(label: Text('Daily Signage')),
+                        DataColumn(label: Text('Daily Awning')),
+                        DataColumn(label: Text('Daily Flange')),
+                      ],
+                      rows: _brandOptions.map((brand) {
+                        final item = branchStats[brand] ?? const _EncoderMetrics();
+                        final allocation = _allocations[branch]?[brand] ?? 0;
+                        final balance = allocation - item.installedCount;
+
+                        return DataRow(
+                          cells: [
+                            DataCell(Text(brand)),
+                            DataCell(Text('$allocation')),
+                            DataCell(Text('${item.installedCount}')),
+                            DataCell(Text('$balance')),
+                            DataCell(Text('${item.signageTotal}')),
+                            DataCell(Text('${item.awningTotal}')),
+                            DataCell(Text('${item.flangeTotal}')),
+                            DataCell(Text('${item.dailySignage}')),
+                            DataCell(Text('${item.dailyAwning}')),
+                            DataCell(Text('${item.dailyFlange}')),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
       ],
     );
   }
@@ -686,6 +900,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             : '${entry.branch}:${entry.rowNumber ?? -1}:${entry.timestamp}';
         final isDeleting = _deletingEntryKeys.contains(entryKey);
         final canDelete = entry.rowNumber != null && entry.rowNumber! > 1;
+        final hasImages = entry.beforeImageDriveUrl.trim().isNotEmpty ||
+          entry.afterImageDriveUrl.trim().isNotEmpty ||
+          entry.completionImageDriveUrl.trim().isNotEmpty;
 
         return Padding(
           padding: const EdgeInsets.all(12),
@@ -699,6 +916,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                       entry.outletCode.isEmpty ? '(No outlet code)' : entry.outletCode,
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                     ),
+                  ),
+                  IconButton(
+                    tooltip: hasImages ? 'View images' : 'No images available',
+                    onPressed: hasImages ? () => _showImagesDialog(entry) : null,
+                    icon: const Icon(Icons.photo_library_outlined),
                   ),
                   IconButton(
                     tooltip: canDelete
@@ -736,6 +958,90 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           ),
         );
       },
+    );
+  }
+
+  Future<void> _showImagesDialog(AdminSubmission entry) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Entry Images'),
+          content: SizedBox(
+            width: 700,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildImagePreviewTile('Before', entry.beforeImageDriveUrl),
+                  const SizedBox(height: 12),
+                  _buildImagePreviewTile('After', entry.afterImageDriveUrl),
+                  const SizedBox(height: 12),
+                  _buildImagePreviewTile('Completion', entry.completionImageDriveUrl),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildImagePreviewTile(String label, String url) {
+    final normalized = url.trim();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 6),
+        if (normalized.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Text('No image URL available.'),
+          )
+        else
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.network(
+              normalized,
+              fit: BoxFit.cover,
+              height: 180,
+              width: double.infinity,
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return Container(
+                  height: 180,
+                  alignment: Alignment.center,
+                  color: Colors.grey.shade100,
+                  child: const CircularProgressIndicator(),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  height: 180,
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  alignment: Alignment.centerLeft,
+                  color: Colors.grey.shade100,
+                  child: const Text('Unable to load image. Check file sharing permissions.'),
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 
@@ -913,6 +1219,74 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     return result;
   }
 
+  Map<String, Map<String, _EncoderMetrics>> _computeEncoderStats(
+    List<AdminSubmission> submissions,
+  ) {
+    final result = <String, Map<String, _EncoderMetrics>>{};
+
+    for (final branch in _branchOptions(includeAll: false)) {
+      result[branch] = {
+        for (final brand in _brandOptions) brand: const _EncoderMetrics(),
+      };
+    }
+
+    final now = DateTime.now();
+
+    for (final submission in submissions) {
+      final branch = submission.branch;
+      if (!result.containsKey(branch)) continue;
+
+      final brandTokens = submission.brands
+          .split(',')
+          .map((item) => item.trim().toUpperCase())
+          .where((item) => item.isNotEmpty)
+          .toSet();
+      if (brandTokens.isEmpty) continue;
+
+      final signage = _parseQuantity(submission.signageQuantity);
+      final awning = _parseQuantity(submission.awningQuantity);
+      final flange = _parseQuantity(submission.flangeQuantity);
+      final submittedDate = _parseSubmissionDate(submission);
+      final isToday = submittedDate != null &&
+          submittedDate.year == now.year &&
+          submittedDate.month == now.month &&
+          submittedDate.day == now.day;
+
+      for (final brand in _brandOptions) {
+        if (!brandTokens.contains(brand)) continue;
+
+        final current = result[branch]![brand] ?? const _EncoderMetrics();
+        result[branch]![brand] = _EncoderMetrics(
+          installedCount: current.installedCount + 1,
+          signageTotal: current.signageTotal + signage,
+          awningTotal: current.awningTotal + awning,
+          flangeTotal: current.flangeTotal + flange,
+          dailySignage: current.dailySignage + (isToday ? signage : 0),
+          dailyAwning: current.dailyAwning + (isToday ? awning : 0),
+          dailyFlange: current.dailyFlange + (isToday ? flange : 0),
+        );
+      }
+    }
+
+    return result;
+  }
+
+  Map<String, _EncoderMetrics> _emptyEncoderStats() {
+    return {for (final brand in _brandOptions) brand: const _EncoderMetrics()};
+  }
+
+  int _parseQuantity(String value) {
+    return int.tryParse(value.trim()) ?? 0;
+  }
+
+  DateTime? _parseSubmissionDate(AdminSubmission submission) {
+    final source = submission.scriptTimestamp.trim().isNotEmpty
+        ? submission.scriptTimestamp
+        : submission.timestamp;
+    final parsed = DateTime.tryParse(source);
+    return parsed?.toLocal();
+  }
+
   String _formatTimestamp(String input) {
     final parsed = DateTime.tryParse(input);
     if (parsed == null) return input;
@@ -925,4 +1299,24 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     }
     return _formatTimestamp(entry.timestamp);
   }
+}
+
+class _EncoderMetrics {
+  const _EncoderMetrics({
+    this.installedCount = 0,
+    this.signageTotal = 0,
+    this.awningTotal = 0,
+    this.flangeTotal = 0,
+    this.dailySignage = 0,
+    this.dailyAwning = 0,
+    this.dailyFlange = 0,
+  });
+
+  final int installedCount;
+  final int signageTotal;
+  final int awningTotal;
+  final int flangeTotal;
+  final int dailySignage;
+  final int dailyAwning;
+  final int dailyFlange;
 }

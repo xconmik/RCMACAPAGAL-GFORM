@@ -144,6 +144,7 @@ function _handleSubmitForm(e) {
     new Date(),
     _string(payload.branch),
     _string(payload.outletCode),
+    _string(payload.fullName),
     _string(payload.signageName),
     _string(payload.storeOwnerName),
     _string(payload.completeAddress),
@@ -154,14 +155,7 @@ function _handleSubmitForm(e) {
     _nested(payload.beforeImageDriveUrl),
     _nested(payload.afterImageDriveUrl),
     _nested(payload.completionImageDriveUrl),
-    _nested(payload.beforeImage, 'latitude'),
-    _nested(payload.beforeImage, 'longitude'),
-    _nested(payload.afterImage, 'latitude'),
-    _nested(payload.afterImage, 'longitude'),
-    _nested(payload.completionImage, 'latitude'),
-    _nested(payload.completionImage, 'longitude'),
     _string(payload.submittedAt),
-    JSON.stringify(payload),
   ];
 
   sheet.appendRow(row);
@@ -233,7 +227,8 @@ function _buildBranchSummary(branchName, spreadsheetId, sheet, limit) {
   const count = Math.min(limit, totalRows);
   const startRow = lastRow - count + 1;
 
-  const values = sheet.getRange(startRow, 1, count, 21).getValues();
+  const lastColumn = Math.max(sheet.getLastColumn(), 1);
+  const values = sheet.getRange(startRow, 1, count, lastColumn).getValues();
 
   const mappedRows = values
     .map((row, index) => _mapSheetRowToSubmission(branchName, spreadsheetId, row, startRow + index))
@@ -251,7 +246,42 @@ function _buildBranchSummary(branchName, spreadsheetId, sheet, limit) {
 
 function _mapSheetRowToSubmission(branchName, spreadsheetId, row, rowNumber) {
   const scriptTimestamp = _toIsoString(row[0]);
-  const rawPayload = _parseRawPayload(row[20]);
+  const isLegacyRow = row.length >= 21;
+  const rawPayload = isLegacyRow ? _parseRawPayload(row[20]) : {};
+
+  const fullName = isLegacyRow
+    ? _string(rawPayload.fullName)
+    : _string(row[3]);
+  const signageName = isLegacyRow
+    ? _string(row[3])
+    : _string(row[4]);
+  const storeOwnerName = isLegacyRow
+    ? _string(row[4])
+    : _string(row[5]);
+  const brands = isLegacyRow
+    ? _string(row[6])
+    : _string(row[7]);
+  const signageQuantity = isLegacyRow
+    ? _string(row[7])
+    : _string(row[8]);
+  const awningQuantity = isLegacyRow
+    ? _string(row[8])
+    : _string(row[9]);
+  const flangeQuantity = isLegacyRow
+    ? _string(row[9])
+    : _string(row[10]);
+  const beforeImageDriveUrl = isLegacyRow
+    ? _string(row[10])
+    : _string(row[11]);
+  const afterImageDriveUrl = isLegacyRow
+    ? _string(row[11])
+    : _string(row[12]);
+  const completionImageDriveUrl = isLegacyRow
+    ? _string(row[12])
+    : _string(row[13]);
+  const submittedAt = isLegacyRow
+    ? _string(row[19])
+    : _string(row[14]);
 
   return {
     rowNumber: rowNumber,
@@ -260,18 +290,18 @@ function _mapSheetRowToSubmission(branchName, spreadsheetId, row, rowNumber) {
     timestamp: scriptTimestamp,
     scriptTimestamp: scriptTimestamp,
     branch: branchName,
-    fullName: _string(rawPayload.fullName),
+    fullName: fullName,
     outletCode: _string(row[2]),
-    brands: _string(row[6]),
-    signageName: _string(row[3]),
-    storeOwnerName: _string(row[4]),
-    signageQuantity: _string(row[7]),
-    awningQuantity: _string(row[8]),
-    flangeQuantity: _string(row[9]),
-    beforeImageDriveUrl: _string(row[10]),
-    afterImageDriveUrl: _string(row[11]),
-    completionImageDriveUrl: _string(row[12]),
-    submittedAt: _string(row[19]),
+    brands: brands,
+    signageName: signageName,
+    storeOwnerName: storeOwnerName,
+    signageQuantity: signageQuantity,
+    awningQuantity: awningQuantity,
+    flangeQuantity: flangeQuantity,
+    beforeImageDriveUrl: beforeImageDriveUrl,
+    afterImageDriveUrl: afterImageDriveUrl,
+    completionImageDriveUrl: completionImageDriveUrl,
+    submittedAt: submittedAt,
   };
 }
 
@@ -302,6 +332,7 @@ function _ensureHeader(sheet) {
     'timestamp',
     'branch',
     'outletCode',
+    'fullName',
     'signageName',
     'storeOwnerName',
     'completeAddress',
@@ -312,14 +343,7 @@ function _ensureHeader(sheet) {
     'beforeImageDriveUrl',
     'afterImageDriveUrl',
     'completionImageDriveUrl',
-    'beforeLat',
-    'beforeLng',
-    'afterLat',
-    'afterLng',
-    'completionLat',
-    'completionLng',
     'submittedAt',
-    'rawPayloadJson',
   ]);
 }
 
