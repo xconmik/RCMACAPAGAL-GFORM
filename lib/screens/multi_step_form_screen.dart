@@ -38,7 +38,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
   final ImageCaptureService _imageCaptureService = ImageCaptureService();
   final UploadService _uploadService = UploadService();
   final LocalStorageService _localStorageService = LocalStorageService();
-  final LocationCatalogService _locationCatalogService = LocationCatalogService();
+  final LocationCatalogService _locationCatalogService =
+      LocationCatalogService();
 
   final TextEditingController _outletCodeController = TextEditingController();
   final TextEditingController _fullNameController = TextEditingController();
@@ -60,7 +61,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
   String? _selectedBarangay;
 
   List<String> _branches = const <String>[];
-  Map<String, List<String>> _branchMunicipalities = const <String, List<String>>{};
+  Map<String, List<String>> _branchMunicipalities =
+      const <String, List<String>>{};
   Map<String, Map<String, List<String>>> _branchMunicipalityBarangays =
       const <String, Map<String, List<String>>>{};
 
@@ -164,7 +166,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
         return true;
       case 3:
         if (_signageNameController.text.trim().isEmpty) {
-          _showError('Signage name is required.');
+          _showError('Store name is required.');
           return false;
         }
         _formData.signageName = _signageNameController.text.trim();
@@ -222,7 +224,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
             : null;
         return true;
       case 8:
-        if (_formData.awningQuantity == null || _formData.awningQuantity!.isEmpty) {
+        if (_formData.awningQuantity == null ||
+            _formData.awningQuantity!.isEmpty) {
           _showError('Please choose awning quantity.');
           return false;
         }
@@ -238,7 +241,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
             : null;
         return true;
       case 9:
-        if (_formData.flangeQuantity == null || _formData.flangeQuantity!.isEmpty) {
+        if (_formData.flangeQuantity == null ||
+            _formData.flangeQuantity!.isEmpty) {
           _showError('Please choose flange quantity.');
           return false;
         }
@@ -405,9 +409,9 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
 
   Widget _buildBranchStep() {
     if (_isLocationCatalogLoading) {
-      return StepCard(
+      return const StepCard(
         title: 'Select Branch',
-        child: const Column(
+        child: Column(
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 12),
@@ -428,15 +432,15 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 14),
-            PrimaryActionButton(label: 'RETRY', onPressed: _loadLocationCatalog),
+            PrimaryActionButton(
+                label: 'RETRY', onPressed: _loadLocationCatalog),
           ],
         ),
       );
     }
 
-    final selectedBranch = _branches.contains(_formData.branch)
-        ? _formData.branch
-        : null;
+    final selectedBranch =
+        _branches.contains(_formData.branch) ? _formData.branch : null;
 
     return StepCard(
       title: 'Select Branch',
@@ -571,7 +575,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
     final branch = _formData.branch;
     final branchMap = branch == null
         ? const <String, List<String>>{}
-        : (_branchMunicipalityBarangays[branch] ?? const <String, List<String>>{});
+        : (_branchMunicipalityBarangays[branch] ??
+            const <String, List<String>>{});
 
     if (municipality != null && municipality.isNotEmpty) {
       return branchMap[municipality] ?? const [];
@@ -592,9 +597,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
         ? _selectedMunicipality
         : null;
     final barangays = _barangayOptions(municipality: selectedMunicipality);
-    final selectedBarangay = barangays.contains(_selectedBarangay)
-        ? _selectedBarangay
-        : null;
+    final selectedBarangay =
+        barangays.contains(_selectedBarangay) ? _selectedBarangay : null;
 
     return StepCard(
       title: 'LOCATION DETAILS',
@@ -609,8 +613,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
               ),
             ),
             items: municipalities
-                .map((municipality) =>
-                    DropdownMenuItem(value: municipality, child: Text(municipality)))
+                .map((municipality) => DropdownMenuItem(
+                    value: municipality, child: Text(municipality)))
                 .toList(),
             onChanged: (value) {
               setState(() {
@@ -629,7 +633,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
               ),
             ),
             items: barangays
-                .map((barangay) => DropdownMenuItem(value: barangay, child: Text(barangay)))
+                .map((barangay) =>
+                    DropdownMenuItem(value: barangay, child: Text(barangay)))
                 .toList(),
             onChanged: (value) {
               setState(() {
@@ -685,6 +690,17 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
                   height: 120,
                   width: double.infinity,
                   fit: BoxFit.cover,
+                  cacheWidth: 1080,
+                  filterQuality: FilterQuality.low,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      height: 120,
+                      width: double.infinity,
+                      alignment: Alignment.center,
+                      color: Colors.black12,
+                      child: const Text('Unable to preview image'),
+                    );
+                  },
                 ),
               ),
             if (imageData != null) const SizedBox(height: 10),
@@ -779,7 +795,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
                     buttonLabel: 'NEXT',
                   ),
                   _buildTextStep(
-                    title: 'SIGNAGE NAME',
+                    title: 'STORE NAME',
                     controller: _signageNameController,
                     buttonLabel: 'NEXT',
                   ),
@@ -914,8 +930,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
                             isUploading: _isUploadingCompletion,
                             onCameraUpload: () =>
                                 _captureImage('completion', ImageSource.camera),
-                            onAlbumUpload: () =>
-                                _captureImage('completion', ImageSource.gallery),
+                            onAlbumUpload: () => _captureImage(
+                                'completion', ImageSource.gallery),
                           ),
                           const SizedBox(height: 16),
                           PrimaryActionButton(
