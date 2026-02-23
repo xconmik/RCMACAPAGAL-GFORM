@@ -47,6 +47,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
   String _selectedBranch = 'ALL';
   String _searchQuery = '';
+  String? _encoderAreaBranch;
+  String? _dailyReportBranch;
+  String? _dailyReportDateKey;
 
   bool _isLoading = true;
   bool _isLoadingMore = false;
@@ -780,9 +783,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   Widget _buildEncoderAreaView(AdminDashboardData dashboard) {
     final branchOptions = _branchOptions(includeAll: false);
     final stats = _computeEncoderStats(dashboard.recentSubmissions);
-    final branchesToShow = _selectedBranch == 'ALL'
-        ? branchOptions
-        : branchOptions.where((branch) => branch == _selectedBranch).toList();
+    final selectedEncoderBranch = _encoderAreaBranch != null &&
+            branchOptions.contains(_encoderAreaBranch)
+        ? _encoderAreaBranch!
+        : (_selectedBranch != 'ALL' && branchOptions.contains(_selectedBranch)
+            ? _selectedBranch
+            : branchOptions.first);
+    final branchesToShow = <String>[selectedEncoderBranch];
 
     if (branchesToShow.isEmpty) {
       return const Center(child: Text('No encoder data available.'));
@@ -795,10 +802,27 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: branchOptions.map((branch) {
+            final selected = branch == selectedEncoderBranch;
+            return ChoiceChip(
+              label: Text(branch.toUpperCase()),
+              selected: selected,
+              onSelected: (_) {
+                setState(() {
+                  _encoderAreaBranch = branch;
+                  _dailyReportBranch = branch;
+                  _dailyReportDateKey = null;
+                });
+              },
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 10),
         ...branchesToShow.map((branch) {
           final branchStats = stats[branch] ?? _emptyEncoderStats();
-          final dailyReports =
-              _computeDailyReportsForBranch(dashboard.recentSubmissions, branch);
 
           final totalSignage = _brandOptions
               .map((brand) => branchStats[brand]?.signageTotal ?? 0)
@@ -944,13 +968,17 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                       }).toList(),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  _buildDailyReportsSection(branch, dailyReports),
                 ],
               ),
             ),
           );
         }),
+        const SizedBox(height: 12),
+        _buildDailyReportsDropdownSection(
+          submissions: dashboard.recentSubmissions,
+          branchOptions: branchOptions,
+          defaultBranch: selectedEncoderBranch,
+        ),
       ],
     );
   }
@@ -982,60 +1010,133 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 
-  Widget _buildDailyReportsSection(String branch, List<_DailyReport> reports) {
-    if (reports.isEmpty) {
-      return const Text(
-        'No daily reports available yet.',
-        style: TextStyle(color: Colors.black54),
+  Widget _buildDailyReportsDropdownSection({
+    required List<AdminSubmission> submissions,
+    required List<String> branchOptions,
+    required String defaultBranch,
+  }) {
+    final selectedBranch =
+        _dailyReportBranch != null && branchOptions.contains(_dailyReportBranch)
+            ? _dailyReportBranch!
+            : defaultBranch;
+
+    final reports = _computeDailyReportsForBranch(submissions, selectedBranch);
+    final availableDateKeys = reports
+        .map((report) => DateFormat('yyyy-MM-dd').format(report.date))
+        .toList();
+
+    final selectedDateKey = _dailyReportDateKey != null &&
+            availableDateKeys.contains(_dailyReportDateKey)
+        ? _dailyReportDateKey
+        : (availableDateKeys.isNotEmpty ? availableDateKeys.first : null);
+
+    _DailyReport? selectedReport;
+    if (selectedDateKey != null) {
+      selectedReport = reports.firstWhere(
+        (report) =>
+            DateFormat('yyyy-MM-dd').format(report.date) == selectedDateKey,
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Daily Reports',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 8),
-        ...reports.map((report) {
-          return Card(
-            elevation: 0,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$branch DAILY REPORT ${_dailyReportDateFormat.format(report.date)}',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 8),
-                  _buildDailyTypeTable(
-                    typeLabel: 'FLANGE',
-                    values: report.valuesByTypeByBrand['flange'] ??
-                        {for (final brand in _brandOptions) brand: 0},
-                  ),
-                  const SizedBox(height: 8),
-                  _buildDailyTypeTable(
-                    typeLabel: 'AWNINGS',
-                    values: report.valuesByTypeByBrand['awning'] ??
-                        {for (final brand in _brandOptions) brand: 0},
-                  ),
-                  const SizedBox(height: 8),
-                  _buildDailyTypeTable(
-                    typeLabel: 'SIGNAGE',
-                    values: report.valuesByTypeByBrand['signage'] ??
-                        {for (final brand in _brandOptions) brand: 0},
-                  ),
-                ],
-              ),
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Daily Reports',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
             ),
-          );
-        }),
-      ],
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                SizedBox(
+                  width: 260,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: selectedBranch,
+                    decoration: const InputDecoration(labelText: 'Branch'),
+                    items: branchOptions
+                        .map(
+                          (branch) => DropdownMenuItem<String>(
+                            value: branch,
+                            child: Text(branch),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() {
+                        _dailyReportBranch = value;
+                        _dailyReportDateKey = null;
+                      });
+                    },
+                  ),
+                ),
+                SizedBox(
+                  width: 260,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: selectedDateKey,
+                    decoration: const InputDecoration(labelText: 'Date'),
+                    items: availableDateKeys
+                        .map(
+                          (dateKey) => DropdownMenuItem<String>(
+                            value: dateKey,
+                            child: Text(
+                              _dailyReportDateFormat
+                                  .format(DateTime.parse(dateKey)),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: availableDateKeys.isEmpty
+                        ? null
+                        : (value) {
+                            setState(() {
+                              _dailyReportDateKey = value;
+                            });
+                          },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (selectedReport == null)
+              const Text(
+                'No daily reports available yet for this branch.',
+                style: TextStyle(color: Colors.black54),
+              )
+            else ...[
+              Text(
+                '$selectedBranch DAILY REPORT ${_dailyReportDateFormat.format(selectedReport.date)}',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              _buildDailyTypeTable(
+                typeLabel: 'FLANGE',
+                values: selectedReport.valuesByTypeByBrand['flange'] ??
+                    {for (final brand in _brandOptions) brand: 0},
+              ),
+              const SizedBox(height: 8),
+              _buildDailyTypeTable(
+                typeLabel: 'AWNINGS',
+                values: selectedReport.valuesByTypeByBrand['awning'] ??
+                    {for (final brand in _brandOptions) brand: 0},
+              ),
+              const SizedBox(height: 8),
+              _buildDailyTypeTable(
+                typeLabel: 'SIGNAGE',
+                values: selectedReport.valuesByTypeByBrand['signage'] ??
+                    {for (final brand in _brandOptions) brand: 0},
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -1496,7 +1597,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       final report = byDate.putIfAbsent(
         dateKey,
         () => _DailyReportAccumulator(
-          date: DateTime(submittedDate.year, submittedDate.month, submittedDate.day),
+          date: DateTime(
+              submittedDate.year, submittedDate.month, submittedDate.day),
           valuesByTypeByBrand: {
             for (final type in _allocationTypes)
               type: {for (final brand in _brandOptions) brand: 0},
