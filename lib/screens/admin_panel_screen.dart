@@ -848,16 +848,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           final totalAwningBalance = totalAwningAllocation - totalAwning;
           final totalFlangeBalance = totalFlangeAllocation - totalFlange;
 
-          final dailySignage = _brandOptions
-              .map((brand) => branchStats[brand]?.dailySignage ?? 0)
-              .fold<int>(0, (sum, value) => sum + value);
-          final dailyAwning = _brandOptions
-              .map((brand) => branchStats[brand]?.dailyAwning ?? 0)
-              .fold<int>(0, (sum, value) => sum + value);
-          final dailyFlange = _brandOptions
-              .map((brand) => branchStats[brand]?.dailyFlange ?? 0)
-              .fold<int>(0, (sum, value) => sum + value);
-
           return Card(
             elevation: 0,
             shape:
@@ -905,9 +895,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                             ? Colors.red
                             : Colors.green.shade700,
                       ),
-                      _miniStat('Daily Signage', '$dailySignage'),
-                      _miniStat('Daily Awning', '$dailyAwning'),
-                      _miniStat('Daily Flange', '$dailyFlange'),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -927,9 +914,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                         DataColumn(label: Text('Flange Qty')),
                         DataColumn(label: Text('Flange Allocation')),
                         DataColumn(label: Text('Flange Balance')),
-                        DataColumn(label: Text('Daily Signage')),
-                        DataColumn(label: Text('Daily Awning')),
-                        DataColumn(label: Text('Daily Flange')),
                       ],
                       rows: _brandOptions.map((brand) {
                         final item =
@@ -960,9 +944,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                             DataCell(Text('${item.flangeTotal}')),
                             DataCell(Text('$flangeAllocation')),
                             DataCell(Text('$flangeBalance')),
-                            DataCell(Text('${item.dailySignage}')),
-                            DataCell(Text('${item.dailyAwning}')),
-                            DataCell(Text('${item.dailyFlange}')),
                           ],
                         );
                       }).toList(),

@@ -12,22 +12,22 @@ const CONFIG = {
 };
 
 const SHEET_HEADERS_V2 = [
-  'timestamp',
-  'branch',
-  'outletCode',
-  'fullName',
-  'signageName',
-  'storeOwnerName',
-  'purok',
-  'barangay',
-  'municipality',
-  'brands',
-  'signageQuantity',
-  'awningQuantity',
-  'flangeQuantity',
-  'beforeImageDriveUrl',
-  'afterImageDriveUrl',
-  'completionImageDriveUrl',
+  'TIMESTAMP',
+  'BRANCH',
+  'OUTLET_CODE',
+  'INSTALLERS_NAME',
+  'STORE_NAME',
+  'STORE_OWNER_NAME',
+  'PUROK',
+  'BARANGAY',
+  'MUNICIPALITY',
+  'BRAND',
+  'SIGNAGE_QUANTITY',
+  'AWNING_QUANTITY',
+  'FLANGE_QUANTITY',
+  'BEFORE(GPS)',
+  'AFTER(GPS)',
+  'COMPLETION_FORM',
 ];
 
 function doPost(e) {
@@ -158,9 +158,12 @@ function _handleSubmitForm(e) {
   const sheet = _getOrCreateSheet(spreadsheet, CONFIG.SHEET_NAME);
 
   _ensureSheetStructureV2(sheet);
+  const timestamp = _nowTimestamp();
+  const brandTokens = _splitBrands(payload.brands);
+  const safeBrands = brandTokens.length > 0 ? brandTokens : [''];
 
-  const row = [
-    _nowTimestamp(),
+  const rows = safeBrands.map((brand) => [
+    timestamp,
     _string(payload.branch),
     _string(payload.outletCode),
     _string(payload.fullName),
@@ -169,20 +172,22 @@ function _handleSubmitForm(e) {
     _string(payload.purok),
     _string(payload.barangay),
     _string(payload.municipality),
-    _joinArray(payload.brands),
+    brand,
     _string(payload.signageQuantity),
     _string(payload.awningQuantity),
     _string(payload.flangeQuantity),
     _nested(payload.beforeImageDriveUrl),
     _nested(payload.afterImageDriveUrl),
     _nested(payload.completionImageDriveUrl),
-  ];
+  ]);
 
-  sheet.appendRow(row);
+  const startRow = sheet.getLastRow() + 1;
+  sheet.getRange(startRow, 1, rows.length, SHEET_HEADERS_V2.length).setValues(rows);
 
   return _jsonResponse({
     success: true,
     message: 'Form submitted.',
+    rowsInserted: rows.length,
     branch: branchName,
     spreadsheetId: spreadsheetId,
     scriptTimestamp: _nowTimestamp(),
@@ -204,6 +209,7 @@ function _handleAdminData(e) {
     const spreadsheetId = _resolveSpreadsheetIdForBranch(branchName);
     const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
     const sheet = _getOrCreateSheet(spreadsheet, CONFIG.SHEET_NAME);
+    _ensureSheetStructureV2(sheet);
 
     const summary = _buildBranchSummary(branchName, spreadsheetId, sheet, cappedLimit);
     branchSummaries.push(summary.branch);
@@ -372,19 +378,19 @@ function _ensureSheetStructureV2(sheet) {
       _valueByHeader(row, normalizedHeaders, 'timestamp'),
       _valueByHeader(row, normalizedHeaders, 'branch'),
       _valueByHeader(row, normalizedHeaders, 'outletcode'),
-      _valueByHeader(row, normalizedHeaders, 'fullname'),
-      _valueByHeader(row, normalizedHeaders, 'signagename'),
+      _valueByHeader(row, normalizedHeaders, ['fullname', 'installersname']),
+      _valueByHeader(row, normalizedHeaders, ['signagename', 'storename']),
       _valueByHeader(row, normalizedHeaders, 'storeownername'),
       purok,
       barangay,
       municipality,
-      _valueByHeader(row, normalizedHeaders, 'brands'),
+      _valueByHeader(row, normalizedHeaders, ['brands', 'brand']),
       _valueByHeader(row, normalizedHeaders, 'signagequantity'),
       _valueByHeader(row, normalizedHeaders, 'awningquantity'),
       _valueByHeader(row, normalizedHeaders, 'flangequantity'),
-      _valueByHeader(row, normalizedHeaders, 'beforeimagedriveurl'),
-      _valueByHeader(row, normalizedHeaders, 'afterimagedriveurl'),
-      _valueByHeader(row, normalizedHeaders, 'completionimagedriveurl'),
+      _valueByHeader(row, normalizedHeaders, ['beforeimagedriveurl', 'beforegps']),
+      _valueByHeader(row, normalizedHeaders, ['afterimagedriveurl', 'aftergps']),
+      _valueByHeader(row, normalizedHeaders, ['completionimagedriveurl', 'completionform']),
     ];
   });
 
@@ -394,6 +400,38 @@ function _ensureSheetStructureV2(sheet) {
   if (migrated.length > 0) {
     sheet.getRange(2, 1, migrated.length, SHEET_HEADERS_V2.length).setValues(migrated);
   }
+
+  _normalizeBrandRows(sheet);
+}
+
+function _normalizeBrandRows(sheet) {
+  const rowCount = Math.max(sheet.getLastRow() - 1, 0);
+  if (rowCount <= 0) return;
+
+  const values = sheet.getRange(2, 1, rowCount, SHEET_HEADERS_V2.length).getValues();
+  const brandColumnIndex = 9;
+  let changed = false;
+  const expanded = [];
+
+  values.forEach((row) => {
+    const brands = _splitBrands(row[brandColumnIndex]);
+    if (brands.length <= 1) {
+      expanded.push(row);
+      return;
+    }
+
+    changed = true;
+    brands.forEach((brand) => {
+      const newRow = row.slice();
+      newRow[brandColumnIndex] = brand;
+      expanded.push(newRow);
+    });
+  });
+
+  if (!changed) return;
+
+  sheet.getRange(2, 1, rowCount, SHEET_HEADERS_V2.length).clearContent();
+  sheet.getRange(2, 1, expanded.length, SHEET_HEADERS_V2.length).setValues(expanded);
 }
 
 function _ensureColumnCount(sheet, requiredColumns) {
@@ -404,11 +442,22 @@ function _ensureColumnCount(sheet, requiredColumns) {
 }
 
 function _normalizeHeader(value) {
-  return String(value || '').trim().toLowerCase();
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
 }
 
 function _valueByHeader(row, normalizedHeaders, headerName) {
-  const index = normalizedHeaders.indexOf(headerName);
+  const candidates = Array.isArray(headerName) ? headerName : [headerName];
+  const normalizedCandidates = candidates.map((name) => _normalizeHeader(name));
+
+  let index = -1;
+  for (let i = 0; i < normalizedCandidates.length; i += 1) {
+    index = normalizedHeaders.indexOf(normalizedCandidates[i]);
+    if (index >= 0) break;
+  }
+
   if (index < 0 || index >= row.length) return '';
   return row[index];
 }
@@ -478,7 +527,7 @@ function _removeSubmittedAtColumnIfPresent(sheet) {
 
   const headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
   const submittedAtIndex = headers.findIndex((item) =>
-    String(item).trim().toLowerCase() === 'submittedat'
+    _normalizeHeader(item) === 'submittedat'
   );
 
   if (submittedAtIndex >= 0) {
@@ -508,6 +557,22 @@ function _string(value) {
 
 function _joinArray(value) {
   return Array.isArray(value) ? value.join(', ') : '';
+}
+
+function _splitBrands(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => _string(item).trim())
+      .filter((item) => item);
+  }
+
+  const text = _string(value).trim();
+  if (!text) return [];
+
+  return text
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item);
 }
 
 function _nested(obj, key) {
