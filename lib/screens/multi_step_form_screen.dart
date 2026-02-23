@@ -7,6 +7,7 @@ import '../models/captured_image_data.dart';
 import '../models/installation_form_data.dart';
 import '../services/image_capture_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/location_catalog_service.dart';
 import '../services/upload_service.dart';
 import '../widgets/primary_action_button.dart';
 import '../widgets/step_card.dart';
@@ -19,58 +20,7 @@ class MultiStepFormScreen extends StatefulWidget {
 }
 
 class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
-  static const List<String> _branches = [
-    'Bulacan',
-    'DSO Talavera',
-    'DSO Tarlac',
-    'DSO Pampanga',
-    'DSO Villasis',
-    'DSO Bantay',
-  ];
-
   static const List<String> _brands = ['CAMEL', 'WINSTON', 'MIGHTY'];
-
-  static const Map<String, List<String>> _branchMunicipalities = {
-    'Bulacan': ['Meycauayan', 'Marilao', 'Guiguinto', 'Bocaue', 'Balagtas'],
-    'DSO Talavera': ['Talavera', 'Guimba', 'Cuyapo', 'Lupao', 'Nampicuan'],
-    'DSO Tarlac': ['Tarlac City', 'Concepcion', 'Capas', 'Bamban', 'La Paz'],
-    'DSO Pampanga': ['San Fernando', 'Angeles', 'Mabalacat', 'Mexico', 'Apalit'],
-    'DSO Villasis': ['Villasis', 'Urdaneta', 'Rosales', 'Malasiqui', 'Santa Maria'],
-    'DSO Bantay': ['Bantay', 'Vigan', 'Santo Domingo', 'San Vicente', 'Caoayan'],
-  };
-
-  static const Map<String, List<String>> _municipalityBarangays = {
-    'Meycauayan': ['Calvario', 'Banga', 'Bayugo', 'Langka'],
-    'Marilao': ['Loma de Gato', 'Patubig', 'Prenza 1', 'Prenza 2'],
-    'Guiguinto': ['Tabang', 'Poblacion', 'Tuktukan', 'Cutcut'],
-    'Bocaue': ['Bundukan', 'Taal', 'Igulot', 'Antipona'],
-    'Balagtas': ['Borol 1st', 'Borol 2nd', 'Poblacion', 'Wawa'],
-    'Talavera': ['Bagong Sikat', 'Maestrang Kikay', 'Sampaloc', 'Bantug'],
-    'Guimba': ['Bunol', 'Cabaruan', 'Culong', 'Macamias'],
-    'Cuyapo': ['District I', 'District II', 'District III', 'District IV'],
-    'Lupao': ['Bagong Flores', 'San Pedro', 'Agupalo Weste', 'Namulandayan'],
-    'Nampicuan': ['Burgos', 'Luna', 'Poblacion East', 'Poblacion West'],
-    'Tarlac City': ['San Roque', 'Maliwalo', 'San Miguel', 'Tibag'],
-    'Concepcion': ['Alfonso', 'Caluluan', 'Parulung', 'San Nicolas Balas'],
-    'Capas': ['Santo Rosario', 'Dolores', 'Estrada', 'Cutcut 1st'],
-    'Bamban': ['Anupul', 'Lourdes', 'San Nicolas', 'San Vicente'],
-    'La Paz': ['Poblacion', 'San Isidro', 'Mayang', 'Matayumtayum'],
-    'San Fernando': ['San Agustin', 'San Jose', 'Calulut', 'Del Pilar'],
-    'Angeles': ['Pampang', 'Balibago', 'Cutcut', 'Pulung Maragul'],
-    'Mabalacat': ['Dau', 'Mawaque', 'San Francisco', 'Camachiles'],
-    'Mexico': ['Santo Rosario', 'San Jose Malino', 'Camuning', 'Acli'],
-    'Apalit': ['San Juan', 'Sampaloc', 'Balucuc', 'Capalangan'],
-    'Villasis': ['Bacag', 'Barangobong', 'Poblacion', 'Tombod'],
-    'Urdaneta': ['Nancayasan', 'Camantiles', 'Cabaruan', 'San Vicente'],
-    'Rosales': ['Carmen East', 'Coliling', 'Don Antonio Village', 'Poblacion'],
-    'Malasiqui': ['Aliaga', 'Bawer', 'Binalay', 'Payar'],
-    'Santa Maria': ['Nalvo', 'Samon', 'Poblacion East', 'Poblacion West'],
-    'Bantay': ['Ora East', 'Ora Centro', 'Quimmarayan', 'Taguiporo'],
-    'Vigan': ['Ayusan Norte', 'Pantay Daya', 'Paoa', 'Raois'],
-    'Santo Domingo': ['Baballasang', 'Poblacion', 'Masadag', 'Lussoc'],
-    'San Vicente': ['Poblacion', 'Bayubay Sur', 'Bingsang', 'Labuan'],
-    'Caoayan': ['Nansuagao', 'Poblacion', 'Puro', 'Nagyubuyuban'],
-  };
 
   static const List<String> _quantityOptions = [
     '0',
@@ -88,6 +38,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
   final ImageCaptureService _imageCaptureService = ImageCaptureService();
   final UploadService _uploadService = UploadService();
   final LocalStorageService _localStorageService = LocalStorageService();
+  final LocationCatalogService _locationCatalogService = LocationCatalogService();
 
   final TextEditingController _outletCodeController = TextEditingController();
   final TextEditingController _fullNameController = TextEditingController();
@@ -103,8 +54,52 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
   bool _isUploadingBefore = false;
   bool _isUploadingAfter = false;
   bool _isUploadingCompletion = false;
+  bool _isLocationCatalogLoading = true;
+  String? _locationCatalogError;
   String? _selectedMunicipality;
   String? _selectedBarangay;
+
+  List<String> _branches = const <String>[];
+  Map<String, List<String>> _branchMunicipalities = const <String, List<String>>{};
+  Map<String, Map<String, List<String>>> _branchMunicipalityBarangays =
+      const <String, Map<String, List<String>>>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLocationCatalog();
+  }
+
+  Future<void> _loadLocationCatalog() async {
+    setState(() {
+      _isLocationCatalogLoading = true;
+      _locationCatalogError = null;
+    });
+
+    try {
+      final catalog = await _locationCatalogService.loadCatalog();
+
+      if (!mounted) return;
+      setState(() {
+        _branches = catalog.branches;
+        _branchMunicipalities = catalog.branchMunicipalities;
+        _branchMunicipalityBarangays = catalog.branchMunicipalityBarangays;
+        _isLocationCatalogLoading = false;
+
+        if (_formData.branch != null && !_branches.contains(_formData.branch)) {
+          _formData.branch = null;
+          _selectedMunicipality = null;
+          _selectedBarangay = null;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLocationCatalogLoading = false;
+        _locationCatalogError = 'Failed to load location catalog. $e';
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -138,6 +133,16 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
   bool _validateCurrentStep() {
     switch (_currentStep) {
       case 0:
+        if (_isLocationCatalogLoading) {
+          _showError('Location data is still loading. Please wait.');
+          return false;
+        }
+
+        if (_locationCatalogError != null) {
+          _showError('Location data failed to load. Tap RETRY first.');
+          return false;
+        }
+
         if (_formData.branch == null || _formData.branch!.isEmpty) {
           _showError('Please select a branch.');
           return false;
@@ -398,6 +403,87 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
     );
   }
 
+  Widget _buildBranchStep() {
+    if (_isLocationCatalogLoading) {
+      return StepCard(
+        title: 'Select Branch',
+        child: const Column(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 12),
+            Text('Loading branch and location data...'),
+          ],
+        ),
+      );
+    }
+
+    if (_locationCatalogError != null) {
+      return StepCard(
+        title: 'Select Branch',
+        child: Column(
+          children: [
+            Text(
+              _locationCatalogError!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 14),
+            PrimaryActionButton(label: 'RETRY', onPressed: _loadLocationCatalog),
+          ],
+        ),
+      );
+    }
+
+    final selectedBranch = _branches.contains(_formData.branch)
+        ? _formData.branch
+        : null;
+
+    return StepCard(
+      title: 'Select Branch',
+      child: Column(
+        children: [
+          DropdownButtonFormField<String>(
+            initialValue: selectedBranch,
+            decoration: InputDecoration(
+              hintText: 'Select branch',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            items: _branches
+                .map(
+                  (branch) => DropdownMenuItem<String>(
+                    value: branch,
+                    child: Text(branch),
+                  ),
+                )
+                .toList(),
+            onChanged: _branches.isEmpty
+                ? null
+                : (value) {
+                    setState(() {
+                      _formData.branch = value;
+                      _selectedMunicipality = null;
+                      _selectedBarangay = null;
+                      _formData.municipality = null;
+                      _formData.barangay = null;
+                    });
+                  },
+          ),
+          if (_branches.isEmpty) ...[
+            const SizedBox(height: 12),
+            const Text('No branch data found in location catalog.'),
+          ],
+          const SizedBox(height: 20),
+          PrimaryActionButton(
+            label: 'NEXT',
+            onPressed: _branches.isEmpty ? null : _goNext,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTextStep({
     required String title,
     required TextEditingController controller,
@@ -482,14 +568,19 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
   }
 
   List<String> _barangayOptions({String? municipality}) {
+    final branch = _formData.branch;
+    final branchMap = branch == null
+        ? const <String, List<String>>{}
+        : (_branchMunicipalityBarangays[branch] ?? const <String, List<String>>{});
+
     if (municipality != null && municipality.isNotEmpty) {
-      return _municipalityBarangays[municipality] ?? const [];
+      return branchMap[municipality] ?? const [];
     }
 
     final barangays = <String>{};
 
     for (final item in _municipalityOptions()) {
-      barangays.addAll(_municipalityBarangays[item] ?? const <String>[]);
+      barangays.addAll(branchMap[item] ?? const <String>[]);
     }
 
     return barangays.toList()..sort();
@@ -676,41 +767,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
                 controller: _pageController,
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
-                  StepCard(
-                    title: 'Select Branch',
-                    child: Column(
-                      children: [
-                        DropdownButtonFormField<String>(
-                          initialValue: _formData.branch,
-                          decoration: InputDecoration(
-                            hintText: 'Select branch',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
-                          items: _branches
-                              .map(
-                                (branch) => DropdownMenuItem<String>(
-                                  value: branch,
-                                  child: Text(branch),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              _formData.branch = value;
-                              _selectedMunicipality = null;
-                              _selectedBarangay = null;
-                              _formData.municipality = null;
-                              _formData.barangay = null;
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 20),
-                        PrimaryActionButton(label: 'NEXT', onPressed: _goNext),
-                      ],
-                    ),
-                  ),
+                  _buildBranchStep(),
                   _buildTextStep(
                     title: 'INSTALLER NAME',
                     controller: _fullNameController,

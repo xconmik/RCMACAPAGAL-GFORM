@@ -25,7 +25,9 @@ class ImageCaptureService {
   }) async {
     final pickedFile = await _picker.pickImage(
       source: source,
-      imageQuality: 80,
+      imageQuality: 70,
+      maxWidth: 1600,
+      maxHeight: 1600,
     );
 
     if (pickedFile == null) return null;
@@ -156,12 +158,12 @@ class ImageCaptureService {
     final lower = sourcePath.toLowerCase();
 
     if (lower.endsWith('.png')) {
-      return sourcePath.substring(0, sourcePath.length - 4) + '_wm.png';
+      return '${sourcePath.substring(0, sourcePath.length - 4)}_wm.png';
     }
 
     if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
       final dotIndex = sourcePath.lastIndexOf('.');
-      return sourcePath.substring(0, dotIndex) + '_wm.jpg';
+      return '${sourcePath.substring(0, dotIndex)}_wm.jpg';
     }
 
     return '${sourcePath}_wm.jpg';
@@ -172,6 +174,6 @@ class ImageCaptureService {
     if (lower.endsWith('.png')) {
       return img.encodePng(image);
     }
-    return img.encodeJpg(image, quality: 88);
+    return img.encodeJpg(image, quality: 72);
   }
 }

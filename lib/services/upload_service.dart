@@ -69,7 +69,7 @@ class UploadService {
       'capturedAt': imageData.capturedAt.toIso8601String(),
     };
 
-    final response = await _postJsonHandlingRedirect(
+    final response = await _postJson(
       Uri.parse(ApiEndpoints.googleDriveUploadUrl),
       payload,
     );
@@ -82,6 +82,12 @@ class UploadService {
 
     final decoded = _tryDecodeJson(response.body);
     if (decoded is Map<String, dynamic>) {
+      if (decoded['success'] == false) {
+        throw Exception(
+          decoded['error']?.toString() ?? 'Upload failed on backend.',
+        );
+      }
+
       final fileUrl = decoded['fileUrl'] ?? decoded['url'] ?? decoded['driveUrl'];
       if (fileUrl is String && fileUrl.trim().isNotEmpty) {
         return fileUrl;
@@ -108,7 +114,7 @@ class UploadService {
       return;
     }
 
-    final response = await _postJsonHandlingRedirect(
+    final response = await _postJson(
       Uri.parse(ApiEndpoints.googleSheetsSubmitUrl),
       payload,
     );
@@ -120,26 +126,18 @@ class UploadService {
     }
   }
 
-  Future<http.Response> _postJsonHandlingRedirect(
+  Future<http.Response> _postJson(
     Uri uri,
     Map<String, dynamic> payload,
   ) async {
     try {
-      var response = await http
+      final response = await http
           .post(
             uri,
             headers: const {'Content-Type': 'application/json'},
             body: jsonEncode(payload),
           )
           .timeout(_requestTimeout);
-
-      if (_isRedirect(response.statusCode)) {
-        final location = response.headers['location'];
-        if (location != null && location.trim().isNotEmpty) {
-          final redirectedUri = Uri.parse(location);
-          response = await http.get(redirectedUri).timeout(_requestTimeout);
-        }
-      }
 
       return response;
     } on TimeoutException {
@@ -155,11 +153,4 @@ class UploadService {
     }
   }
 
-  bool _isRedirect(int statusCode) {
-    return statusCode == HttpStatus.movedPermanently ||
-        statusCode == HttpStatus.found ||
-        statusCode == HttpStatus.seeOther ||
-        statusCode == HttpStatus.temporaryRedirect ||
-        statusCode == HttpStatus.permanentRedirect;
-  }
 }
