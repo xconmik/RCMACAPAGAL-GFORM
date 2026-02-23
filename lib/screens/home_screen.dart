@@ -3,8 +3,21 @@ import 'package:flutter/material.dart';
 import '../widgets/primary_action_button.dart';
 import 'multi_step_form_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  static const AssetImage _logoImage = AssetImage('assets/logo.jpg');
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    precacheImage(_logoImage, context);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,6 +48,7 @@ class HomeScreen extends StatelessWidget {
                               'assets/logo.jpg',
                               height: 96,
                               fit: BoxFit.contain,
+                              filterQuality: FilterQuality.low,
                             ),
                           ),
                         ),
@@ -57,7 +71,8 @@ class HomeScreen extends StatelessWidget {
                         child: Text(
                           'Siguraduhing tama ang mga detalye na ilalagay.',
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w600),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -66,7 +81,8 @@ class HomeScreen extends StatelessWidget {
                         child: Text(
                           'Bawal magkabit malapit sa SIMBAHAN, ESKWELAHAN, BARANGAY HALL, OSPITAL, AT PARKE. (100 meters away)',
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w700),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -75,7 +91,8 @@ class HomeScreen extends StatelessWidget {
                         child: Text(
                           'Paki linawan ang pag kuha ng PICTURE ng BEFORE, AFTER at COMPLETION FORM.',
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w600),
                         ),
                       ),
                       const SizedBox(height: 24),
