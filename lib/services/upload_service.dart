@@ -168,14 +168,13 @@ class UploadService {
     } catch (_) {
       return null;
     }
-
-    bool _isRedirect(int statusCode) {
-      return statusCode == HttpStatus.movedPermanently ||
-          statusCode == HttpStatus.found ||
-          statusCode == HttpStatus.seeOther ||
-          statusCode == HttpStatus.temporaryRedirect ||
-          statusCode == HttpStatus.permanentRedirect;
-    }
   }
 
+  bool _isRedirect(int statusCode) {
+    return statusCode == HttpStatus.movedPermanently ||
+        statusCode == HttpStatus.found ||
+        statusCode == HttpStatus.seeOther ||
+        statusCode == HttpStatus.temporaryRedirect ||
+        statusCode == HttpStatus.permanentRedirect;
+  }
 }
