@@ -471,17 +471,17 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
   }
 
   List<String> _municipalityOptions() {
-    final municipalities = <String>{};
+    final branch = _formData.branch;
+    if (branch == null || branch.isEmpty) return const <String>[];
 
-    for (final items in _branchMunicipalities.values) {
-      municipalities.addAll(items);
-    }
+    final municipalities = <String>{
+      ...(_branchMunicipalities[branch] ?? const <String>[]),
+    };
 
     return municipalities.toList()..sort();
   }
 
-  List<String> _barangayOptions() {
-    final municipality = _selectedMunicipality;
+  List<String> _barangayOptions({String? municipality}) {
     if (municipality != null && municipality.isNotEmpty) {
       return _municipalityBarangays[municipality] ?? const [];
     }
@@ -497,14 +497,20 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
 
   Widget _buildLocationStep() {
     final municipalities = _municipalityOptions();
-    final barangays = _barangayOptions();
+    final selectedMunicipality = municipalities.contains(_selectedMunicipality)
+        ? _selectedMunicipality
+        : null;
+    final barangays = _barangayOptions(municipality: selectedMunicipality);
+    final selectedBarangay = barangays.contains(_selectedBarangay)
+        ? _selectedBarangay
+        : null;
 
     return StepCard(
       title: 'LOCATION DETAILS',
       child: Column(
         children: [
           DropdownButtonFormField<String>(
-            initialValue: _selectedMunicipality,
+            initialValue: selectedMunicipality,
             decoration: InputDecoration(
               hintText: 'Select Municipality',
               border: OutlineInputBorder(
@@ -524,7 +530,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            initialValue: _selectedBarangay,
+            initialValue: selectedBarangay,
             decoration: InputDecoration(
               hintText: 'Select Barangay',
               border: OutlineInputBorder(
