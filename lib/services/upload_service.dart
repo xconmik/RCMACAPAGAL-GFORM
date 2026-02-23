@@ -10,6 +10,7 @@ import '../models/captured_image_data.dart';
 class UploadService {
   static const Duration _requestTimeout = Duration(seconds: 60);
   static const Duration _uploadTimeout = Duration(seconds: 120);
+  static const int _maxUploadBytes = 2 * 1024 * 1024;
 
   Future<String> uploadImageToGoogleDrive(CapturedImageData imageData) async {
     if (!ApiEndpoints.hasDriveEndpoint) {
@@ -57,6 +58,12 @@ class UploadService {
   Future<String> _uploadImageToAppsScript(CapturedImageData imageData) async {
     final file = File(imageData.filePath);
     final bytes = await file.readAsBytes();
+
+    if (bytes.length > _maxUploadBytes) {
+      throw Exception(
+        'Image file is too large (${(bytes.length / (1024 * 1024)).toStringAsFixed(2)}MB). Please retake photo and avoid ultra-wide/very large images.',
+      );
+    }
 
     final payload = {
       'fileName': file.uri.pathSegments.isNotEmpty
@@ -131,13 +138,23 @@ class UploadService {
     Map<String, dynamic> payload,
   ) async {
     try {
-      final response = await http
+      var response = await http
           .post(
             uri,
             headers: const {'Content-Type': 'application/json'},
             body: jsonEncode(payload),
           )
           .timeout(_requestTimeout);
+
+      if (_isRedirect(response.statusCode)) {
+        final location = response.headers['location'];
+        if (location == null || location.trim().isEmpty) {
+          throw Exception('Upload redirected without location header.');
+        }
+
+        final redirectedUri = Uri.parse(location);
+        response = await http.get(redirectedUri).timeout(_requestTimeout);
+      }
 
       return response;
     } on TimeoutException {
@@ -150,6 +167,14 @@ class UploadService {
       return jsonDecode(responseBody);
     } catch (_) {
       return null;
+    }
+
+    bool _isRedirect(int statusCode) {
+      return statusCode == HttpStatus.movedPermanently ||
+          statusCode == HttpStatus.found ||
+          statusCode == HttpStatus.seeOther ||
+          statusCode == HttpStatus.temporaryRedirect ||
+          statusCode == HttpStatus.permanentRedirect;
     }
   }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:geolocator/geolocator.dart';
 
 class LocationService {
@@ -22,6 +24,20 @@ class LocationService {
       );
     }
 
-    return Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+    try {
+      return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+        timeLimit: const Duration(seconds: 12),
+      );
+    } on TimeoutException {
+      final lastKnown = await Geolocator.getLastKnownPosition();
+      if (lastKnown != null) {
+        return lastKnown;
+      }
+
+      throw Exception(
+        'Unable to get GPS location quickly. Move to open area, turn on high accuracy location, then retry.',
+      );
+    }
   }
 }

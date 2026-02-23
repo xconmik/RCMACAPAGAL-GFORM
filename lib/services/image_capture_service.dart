@@ -13,6 +13,7 @@ class ImageCaptureService {
       : _locationService = locationService ?? LocationService();
 
   static const String _logoAssetPath = 'assets/logo.jpg';
+  static const int _maxDimension = 1280;
 
   final LocationService _locationService;
   final ImagePicker _picker = ImagePicker();
@@ -25,9 +26,9 @@ class ImageCaptureService {
   }) async {
     final pickedFile = await _picker.pickImage(
       source: source,
-      imageQuality: 70,
-      maxWidth: 1600,
-      maxHeight: 1600,
+      imageQuality: 60,
+      maxWidth: _maxDimension.toDouble(),
+      maxHeight: _maxDimension.toDouble(),
     );
 
     if (pickedFile == null) return null;
@@ -62,8 +63,16 @@ class ImageCaptureService {
     try {
       final sourceFile = File(sourcePath);
       final bytes = await sourceFile.readAsBytes();
-      final decoded = img.decodeImage(bytes);
+      var decoded = img.decodeImage(bytes);
       if (decoded == null) return sourcePath;
+
+      if (decoded.width > _maxDimension || decoded.height > _maxDimension) {
+        decoded = img.copyResize(
+          decoded,
+          width: decoded.width >= decoded.height ? _maxDimension : null,
+          height: decoded.height > decoded.width ? _maxDimension : null,
+        );
+      }
 
       final formatter = DateFormat('yyyy-MM-dd HH:mm:ss');
       final safeInstaller = (installerName ?? '').trim().isEmpty
@@ -81,9 +90,9 @@ class ImageCaptureService {
       ];
 
       const padding = 16;
-      const lineHeight = 18;
+      const lineHeight = 16;
       final blockHeight = (lines.length * lineHeight) + 14;
-      final startY = decoded.height - blockHeight - padding;
+      final startY = (decoded.height - blockHeight - padding).clamp(0, decoded.height - 1);
 
       await _drawLogo(decoded, padding);
 
@@ -174,6 +183,6 @@ class ImageCaptureService {
     if (lower.endsWith('.png')) {
       return img.encodePng(image);
     }
-    return img.encodeJpg(image, quality: 72);
+    return img.encodeJpg(image, quality: 60);
   }
 }
