@@ -42,7 +42,6 @@ class InstallationFormData {
       'beforeImage': beforeImage?.toJson(),
       'afterImage': afterImage?.toJson(),
       'completionImage': completionImage?.toJson(),
-      'submittedAt': DateTime.now().toIso8601String(),
     };
   }
 }

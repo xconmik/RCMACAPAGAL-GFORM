@@ -25,7 +25,6 @@ class AdminSubmission {
     required this.rowNumber,
     required this.timestamp,
     required this.scriptTimestamp,
-    required this.submittedAt,
     required this.branch,
     required this.fullName,
     required this.outletCode,
@@ -45,7 +44,6 @@ class AdminSubmission {
   final int? rowNumber;
   final String timestamp;
   final String scriptTimestamp;
-  final String submittedAt;
   final String branch;
   final String fullName;
   final String outletCode;
@@ -65,13 +63,12 @@ class AdminSubmission {
       spreadsheetId: (json['spreadsheetId'] ?? '').toString(),
       rowNumber: int.tryParse((json['rowNumber'] ?? '').toString()),
       timestamp: (json['timestamp'] ?? '').toString(),
-      scriptTimestamp: (json['scriptTimestamp'] ?? json['timestamp'] ?? '')
-          .toString(),
-      submittedAt: (json['submittedAt'] ?? '').toString(),
+      scriptTimestamp:
+          (json['scriptTimestamp'] ?? json['timestamp'] ?? '').toString(),
       branch: (json['branch'] ?? '').toString(),
-        fullName: (json['fullName'] ?? '').toString(),
+      fullName: (json['fullName'] ?? '').toString(),
       outletCode: (json['outletCode'] ?? '').toString(),
-        brands: (json['brands'] ?? '').toString(),
+      brands: (json['brands'] ?? '').toString(),
       signageName: (json['signageName'] ?? '').toString(),
       storeOwnerName: (json['storeOwnerName'] ?? '').toString(),
       signageQuantity: (json['signageQuantity'] ?? '').toString(),

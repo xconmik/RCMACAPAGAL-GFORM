@@ -19,7 +19,8 @@ class MultiStepFormScreen extends StatefulWidget {
   State<MultiStepFormScreen> createState() => _MultiStepFormScreenState();
 }
 
-class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
+class _MultiStepFormScreenState extends State<MultiStepFormScreen>
+    with WidgetsBindingObserver {
   static const List<String> _brands = ['CAMEL', 'WINSTON', 'MIGHTY'];
 
   static const List<String> _quantityOptions = [
@@ -69,7 +70,18 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadLocationCatalog();
+    _restoreDraftIfAvailable();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _saveDraftSnapshot();
+    }
   }
 
   Future<void> _loadLocationCatalog() async {
@@ -105,6 +117,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pageController.dispose();
     _fullNameController.dispose();
     _outletCodeController.dispose();
@@ -115,6 +128,185 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
     _awningOtherController.dispose();
     _flangeOtherController.dispose();
     super.dispose();
+  }
+
+  void _syncControllersToFormData() {
+    _formData.fullName = _fullNameController.text.trim().isEmpty
+        ? null
+        : _fullNameController.text.trim();
+    _formData.outletCode = _outletCodeController.text.trim().isEmpty
+        ? null
+        : _outletCodeController.text.trim();
+    _formData.signageName = _signageNameController.text.trim().isEmpty
+        ? null
+        : _signageNameController.text.trim();
+    _formData.storeOwnerName = _storeOwnerController.text.trim().isEmpty
+        ? null
+        : _storeOwnerController.text.trim();
+
+    _formData.purok = _purokController.text.trim().isEmpty
+        ? null
+        : _purokController.text.trim();
+    _formData.municipality = _selectedMunicipality;
+    _formData.barangay = _selectedBarangay;
+
+    if ((_formData.purok ?? '').isNotEmpty &&
+        (_formData.barangay ?? '').isNotEmpty &&
+        (_formData.municipality ?? '').isNotEmpty) {
+      _formData.completeAddress =
+          'Purok ${_formData.purok}, ${_formData.barangay}, ${_formData.municipality}';
+    }
+  }
+
+  Map<String, dynamic> _buildDraftPayload() {
+    _syncControllersToFormData();
+
+    final payload = _formData.toJson();
+    payload['draftCurrentStep'] = _currentStep;
+    payload['draftSelectedMunicipality'] = _selectedMunicipality;
+    payload['draftSelectedBarangay'] = _selectedBarangay;
+    return payload;
+  }
+
+  Future<void> _saveDraftSnapshot() async {
+    await _localStorageService.saveDraft(_buildDraftPayload());
+  }
+
+  CapturedImageData? _capturedImageFromDraft(dynamic raw) {
+    if (raw is! Map) return null;
+
+    final filePath = (raw['filePath'] ?? '').toString().trim();
+    if (filePath.isEmpty) return null;
+
+    final latitude = double.tryParse((raw['latitude'] ?? '').toString()) ?? 0.0;
+    final longitude =
+        double.tryParse((raw['longitude'] ?? '').toString()) ?? 0.0;
+    final capturedAt =
+        DateTime.tryParse((raw['capturedAt'] ?? '').toString()) ??
+            DateTime.now();
+
+    return CapturedImageData(
+      filePath: filePath,
+      latitude: latitude,
+      longitude: longitude,
+      capturedAt: capturedAt,
+    );
+  }
+
+  Future<void> _restoreDraftIfAvailable() async {
+    final draft = await _localStorageService.loadDraft();
+    if (!mounted || draft == null || draft.isEmpty) return;
+
+    final brandsRaw = draft['brands'];
+    final restoredBrands = brandsRaw is List
+        ? brandsRaw
+            .map((item) => item.toString().trim().toUpperCase())
+            .where((item) => item.isNotEmpty)
+            .toList()
+        : <String>[];
+
+    const maxStep = 10;
+    final restoredStep = (draft['draftCurrentStep'] as num?)?.toInt() ?? 0;
+    final safeStep = restoredStep.clamp(0, maxStep);
+
+    setState(() {
+      _formData.branch = (draft['branch'] ?? '').toString().trim().isEmpty
+          ? null
+          : draft['branch'].toString();
+      _formData.fullName = (draft['fullName'] ?? '').toString().trim().isEmpty
+          ? null
+          : draft['fullName'].toString();
+      _formData.outletCode =
+          (draft['outletCode'] ?? '').toString().trim().isEmpty
+              ? null
+              : draft['outletCode'].toString();
+      _formData.signageName =
+          (draft['signageName'] ?? '').toString().trim().isEmpty
+              ? null
+              : draft['signageName'].toString();
+      _formData.storeOwnerName =
+          (draft['storeOwnerName'] ?? '').toString().trim().isEmpty
+              ? null
+              : draft['storeOwnerName'].toString();
+      _formData.purok = (draft['purok'] ?? '').toString().trim().isEmpty
+          ? null
+          : draft['purok'].toString();
+      _formData.barangay = (draft['barangay'] ?? '').toString().trim().isEmpty
+          ? null
+          : draft['barangay'].toString();
+      _formData.municipality =
+          (draft['municipality'] ?? '').toString().trim().isEmpty
+              ? null
+              : draft['municipality'].toString();
+      _formData.completeAddress =
+          (draft['completeAddress'] ?? '').toString().trim().isEmpty
+              ? null
+              : draft['completeAddress'].toString();
+      _formData.signageQuantity =
+          (draft['signageQuantity'] ?? '').toString().trim().isEmpty
+              ? null
+              : draft['signageQuantity'].toString();
+      _formData.signageQuantityOther =
+          (draft['signageQuantityOther'] ?? '').toString().trim().isEmpty
+              ? null
+              : draft['signageQuantityOther'].toString();
+      _formData.awningQuantity =
+          (draft['awningQuantity'] ?? '').toString().trim().isEmpty
+              ? null
+              : draft['awningQuantity'].toString();
+      _formData.awningQuantityOther =
+          (draft['awningQuantityOther'] ?? '').toString().trim().isEmpty
+              ? null
+              : draft['awningQuantityOther'].toString();
+      _formData.flangeQuantity =
+          (draft['flangeQuantity'] ?? '').toString().trim().isEmpty
+              ? null
+              : draft['flangeQuantity'].toString();
+      _formData.flangeQuantityOther =
+          (draft['flangeQuantityOther'] ?? '').toString().trim().isEmpty
+              ? null
+              : draft['flangeQuantityOther'].toString();
+      _formData.beforeImage = _capturedImageFromDraft(draft['beforeImage']);
+      _formData.afterImage = _capturedImageFromDraft(draft['afterImage']);
+      _formData.completionImage =
+          _capturedImageFromDraft(draft['completionImage']);
+
+      _formData.brands
+        ..clear()
+        ..addAll(restoredBrands);
+
+      _selectedMunicipality =
+          (draft['draftSelectedMunicipality'] ?? draft['municipality'])
+                  .toString()
+                  .trim()
+                  .isEmpty
+              ? null
+              : (draft['draftSelectedMunicipality'] ?? draft['municipality'])
+                  .toString();
+      _selectedBarangay = (draft['draftSelectedBarangay'] ?? draft['barangay'])
+              .toString()
+              .trim()
+              .isEmpty
+          ? null
+          : (draft['draftSelectedBarangay'] ?? draft['barangay']).toString();
+
+      _currentStep = safeStep;
+    });
+
+    _fullNameController.text = _formData.fullName ?? '';
+    _outletCodeController.text = _formData.outletCode ?? '';
+    _signageNameController.text = _formData.signageName ?? '';
+    _storeOwnerController.text = _formData.storeOwnerName ?? '';
+    _purokController.text = _formData.purok ?? '';
+    _signageOtherController.text = _formData.signageQuantityOther ?? '';
+    _awningOtherController.text = _formData.awningQuantityOther ?? '';
+    _flangeOtherController.text = _formData.flangeQuantityOther ?? '';
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _pageController.jumpToPage(_currentStep);
+      _showError('Draft restored. You are back on your last step.');
+    });
   }
 
   Future<void> _goNext() async {
@@ -387,6 +579,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
     _signageOtherController.clear();
     _awningOtherController.clear();
     _flangeOtherController.clear();
+    await _localStorageService.clearDraft();
 
     if (!mounted) return;
 
@@ -748,205 +941,215 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen> {
         ? _formData.branch!
         : 'Not selected';
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('R.C. MACAPAGAL GFORM'),
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  progressText,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Branch: $branchLabel',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black54,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await _saveDraftSnapshot();
+        if (!mounted) return;
+        _showError(
+            'Progress saved. Use HOME button to avoid losing your step.');
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('R.C. MACAPAGAL GFORM'),
+        ),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    progressText,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
-            ),
-            Expanded(
-              child: PageView(
-                controller: _pageController,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  _buildBranchStep(),
-                  _buildTextStep(
-                    title: 'INSTALLER NAME',
-                    controller: _fullNameController,
-                    buttonLabel: 'NEXT',
-                  ),
-                  _buildTextStep(
-                    title: 'OUTLET CODE',
-                    controller: _outletCodeController,
-                    buttonLabel: 'NEXT',
-                  ),
-                  _buildTextStep(
-                    title: 'STORE NAME',
-                    controller: _signageNameController,
-                    buttonLabel: 'NEXT',
-                  ),
-                  _buildTextStep(
-                    title: 'STORE OWNER NAME',
-                    controller: _storeOwnerController,
-                    buttonLabel: 'NEXT',
-                  ),
-                  _buildLocationStep(),
-                  StepCard(
-                    title: 'BRAND SELECTION',
-                    child: Column(
-                      children: [
-                        ..._brands.map(
-                          (brand) {
-                            final selected = _formData.brands.contains(brand);
-                            return Card(
-                              elevation: 0,
-                              color: selected
-                                  ? Theme.of(context)
-                                      .colorScheme
-                                      .primaryContainer
-                                  : Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                side: BorderSide(
-                                  color: selected
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Colors.grey.shade300,
-                                ),
-                              ),
-                              child: CheckboxListTile(
-                                value: selected,
-                                title: Text(
-                                  brand,
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                onChanged: (isChecked) {
-                                  setState(() {
-                                    if (isChecked == true) {
-                                      _formData.brands.add(brand);
-                                    } else {
-                                      _formData.brands.remove(brand);
-                                    }
-                                  });
-                                },
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        PrimaryActionButton(
-                          label: 'CONFIRM',
-                          onPressed: _goNext,
-                        ),
-                      ],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Branch: $branchLabel',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black54,
                     ),
                   ),
-                  _buildQuantityStep(
-                    title: 'QUANTITY OF SIGNAGE',
-                    value: _formData.signageQuantity,
-                    otherController: _signageOtherController,
-                    onChanged: (value) {
-                      setState(() {
-                        _formData.signageQuantity = value;
-                        if (value != 'OTHERS') {
-                          _signageOtherController.clear();
-                          _formData.signageQuantityOther = null;
-                        }
-                      });
-                    },
-                  ),
-                  _buildQuantityStep(
-                    title: 'QUANTITY OF AWNINGS',
-                    value: _formData.awningQuantity,
-                    otherController: _awningOtherController,
-                    onChanged: (value) {
-                      setState(() {
-                        _formData.awningQuantity = value;
-                        if (value != 'OTHERS') {
-                          _awningOtherController.clear();
-                          _formData.awningQuantityOther = null;
-                        }
-                      });
-                    },
-                  ),
-                  _buildQuantityStep(
-                    title: 'QUANTITY OF FLANGE',
-                    value: _formData.flangeQuantity,
-                    otherController: _flangeOtherController,
-                    onChanged: (value) {
-                      setState(() {
-                        _formData.flangeQuantity = value;
-                        if (value != 'OTHERS') {
-                          _flangeOtherController.clear();
-                          _formData.flangeQuantityOther = null;
-                        }
-                      });
-                    },
-                  ),
-                  StepCard(
-                    title: 'GDRIVE UPLOADER',
-                    child: SingleChildScrollView(
+                ),
+              ),
+              Expanded(
+                child: PageView(
+                  controller: _pageController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    _buildBranchStep(),
+                    _buildTextStep(
+                      title: 'INSTALLER NAME',
+                      controller: _fullNameController,
+                      buttonLabel: 'NEXT',
+                    ),
+                    _buildTextStep(
+                      title: 'OUTLET CODE',
+                      controller: _outletCodeController,
+                      buttonLabel: 'NEXT',
+                    ),
+                    _buildTextStep(
+                      title: 'STORE NAME',
+                      controller: _signageNameController,
+                      buttonLabel: 'NEXT',
+                    ),
+                    _buildTextStep(
+                      title: 'STORE OWNER NAME',
+                      controller: _storeOwnerController,
+                      buttonLabel: 'NEXT',
+                    ),
+                    _buildLocationStep(),
+                    StepCard(
+                      title: 'BRAND SELECTION',
                       child: Column(
                         children: [
-                          _buildUploadSection(
-                            title: 'BEFORE (WITH GPS)',
-                            imageData: _formData.beforeImage,
-                            isUploading: _isUploadingBefore,
-                            onCameraUpload: () =>
-                                _captureImage('before', ImageSource.camera),
-                            onAlbumUpload: () =>
-                                _captureImage('before', ImageSource.gallery),
-                          ),
-                          const SizedBox(height: 12),
-                          _buildUploadSection(
-                            title: 'AFTER (WITH GPS)',
-                            imageData: _formData.afterImage,
-                            isUploading: _isUploadingAfter,
-                            onCameraUpload: () =>
-                                _captureImage('after', ImageSource.camera),
-                            onAlbumUpload: () =>
-                                _captureImage('after', ImageSource.gallery),
-                          ),
-                          const SizedBox(height: 12),
-                          _buildUploadSection(
-                            title: 'COMPLETION FORM',
-                            imageData: _formData.completionImage,
-                            isUploading: _isUploadingCompletion,
-                            onCameraUpload: () =>
-                                _captureImage('completion', ImageSource.camera),
-                            onAlbumUpload: () => _captureImage(
-                                'completion', ImageSource.gallery),
+                          ..._brands.map(
+                            (brand) {
+                              final selected = _formData.brands.contains(brand);
+                              return Card(
+                                elevation: 0,
+                                color: selected
+                                    ? Theme.of(context)
+                                        .colorScheme
+                                        .primaryContainer
+                                    : Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: BorderSide(
+                                    color: selected
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Colors.grey.shade300,
+                                  ),
+                                ),
+                                child: CheckboxListTile(
+                                  value: selected,
+                                  title: Text(
+                                    brand,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  onChanged: (isChecked) {
+                                    setState(() {
+                                      if (isChecked == true) {
+                                        _formData.brands.add(brand);
+                                      } else {
+                                        _formData.brands.remove(brand);
+                                      }
+                                    });
+                                  },
+                                ),
+                              );
+                            },
                           ),
                           const SizedBox(height: 16),
                           PrimaryActionButton(
-                            label: 'SUBMIT FORM',
-                            onPressed: _submit,
-                            isLoading: _isSubmitting,
+                            label: 'CONFIRM',
+                            onPressed: _goNext,
                           ),
                         ],
                       ),
                     ),
-                  ),
-                ],
+                    _buildQuantityStep(
+                      title: 'QUANTITY OF SIGNAGE',
+                      value: _formData.signageQuantity,
+                      otherController: _signageOtherController,
+                      onChanged: (value) {
+                        setState(() {
+                          _formData.signageQuantity = value;
+                          if (value != 'OTHERS') {
+                            _signageOtherController.clear();
+                            _formData.signageQuantityOther = null;
+                          }
+                        });
+                      },
+                    ),
+                    _buildQuantityStep(
+                      title: 'QUANTITY OF AWNINGS',
+                      value: _formData.awningQuantity,
+                      otherController: _awningOtherController,
+                      onChanged: (value) {
+                        setState(() {
+                          _formData.awningQuantity = value;
+                          if (value != 'OTHERS') {
+                            _awningOtherController.clear();
+                            _formData.awningQuantityOther = null;
+                          }
+                        });
+                      },
+                    ),
+                    _buildQuantityStep(
+                      title: 'QUANTITY OF FLANGE',
+                      value: _formData.flangeQuantity,
+                      otherController: _flangeOtherController,
+                      onChanged: (value) {
+                        setState(() {
+                          _formData.flangeQuantity = value;
+                          if (value != 'OTHERS') {
+                            _flangeOtherController.clear();
+                            _formData.flangeQuantityOther = null;
+                          }
+                        });
+                      },
+                    ),
+                    StepCard(
+                      title: 'GDRIVE UPLOADER',
+                      child: SingleChildScrollView(
+                        child: Column(
+                          children: [
+                            _buildUploadSection(
+                              title: 'BEFORE (WITH GPS)',
+                              imageData: _formData.beforeImage,
+                              isUploading: _isUploadingBefore,
+                              onCameraUpload: () =>
+                                  _captureImage('before', ImageSource.camera),
+                              onAlbumUpload: () =>
+                                  _captureImage('before', ImageSource.gallery),
+                            ),
+                            const SizedBox(height: 12),
+                            _buildUploadSection(
+                              title: 'AFTER (WITH GPS)',
+                              imageData: _formData.afterImage,
+                              isUploading: _isUploadingAfter,
+                              onCameraUpload: () =>
+                                  _captureImage('after', ImageSource.camera),
+                              onAlbumUpload: () =>
+                                  _captureImage('after', ImageSource.gallery),
+                            ),
+                            const SizedBox(height: 12),
+                            _buildUploadSection(
+                              title: 'COMPLETION FORM',
+                              imageData: _formData.completionImage,
+                              isUploading: _isUploadingCompletion,
+                              onCameraUpload: () => _captureImage(
+                                  'completion', ImageSource.camera),
+                              onAlbumUpload: () => _captureImage(
+                                  'completion', ImageSource.gallery),
+                            ),
+                            const SizedBox(height: 16),
+                            PrimaryActionButton(
+                              label: 'SUBMIT FORM',
+                              onPressed: _submit,
+                              isLoading: _isSubmitting,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

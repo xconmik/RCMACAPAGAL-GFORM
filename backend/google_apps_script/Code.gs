@@ -70,7 +70,7 @@ function _handleDeleteEntry(e) {
     message: 'Entry deleted.',
     branch: branchName,
     rowNumber: rowNumber,
-    scriptTimestamp: _toIsoString(new Date()),
+    scriptTimestamp: _nowTimestamp(),
   }, 200);
 }
 
@@ -122,7 +122,7 @@ function _handleUploadImage(e) {
     fileId: file.getId(),
     fileName: file.getName(),
     fileUrl: file.getUrl(),
-    scriptTimestamp: _toIsoString(new Date()),
+    scriptTimestamp: _nowTimestamp(),
   }, 200);
 }
 
@@ -139,9 +139,10 @@ function _handleSubmitForm(e) {
   const sheet = _getOrCreateSheet(spreadsheet, CONFIG.SHEET_NAME);
 
   _ensureHeader(sheet);
+  _removeSubmittedAtColumnIfPresent(sheet);
 
   const row = [
-    new Date(),
+    _nowTimestamp(),
     _string(payload.branch),
     _string(payload.outletCode),
     _string(payload.fullName),
@@ -155,7 +156,6 @@ function _handleSubmitForm(e) {
     _nested(payload.beforeImageDriveUrl),
     _nested(payload.afterImageDriveUrl),
     _nested(payload.completionImageDriveUrl),
-    _string(payload.submittedAt),
   ];
 
   sheet.appendRow(row);
@@ -165,7 +165,7 @@ function _handleSubmitForm(e) {
     message: 'Form submitted.',
     branch: branchName,
     spreadsheetId: spreadsheetId,
-    scriptTimestamp: _toIsoString(new Date()),
+    scriptTimestamp: _nowTimestamp(),
   }, 200);
 }
 
@@ -205,7 +205,7 @@ function _handleAdminData(e) {
     totalSubmissions: totalSubmissions,
     branches: branchSummaries,
     recentSubmissions: finalRows,
-    scriptTimestamp: _toIsoString(new Date()),
+    scriptTimestamp: _nowTimestamp(),
   }, 200);
 }
 
@@ -245,7 +245,7 @@ function _buildBranchSummary(branchName, spreadsheetId, sheet, limit) {
 }
 
 function _mapSheetRowToSubmission(branchName, spreadsheetId, row, rowNumber) {
-  const scriptTimestamp = _toIsoString(row[0]);
+  const scriptTimestamp = _normalizeTimestamp(row[0]);
   const isLegacyRow = row.length >= 21;
   const rawPayload = isLegacyRow ? _parseRawPayload(row[20]) : {};
 
@@ -279,10 +279,6 @@ function _mapSheetRowToSubmission(branchName, spreadsheetId, row, rowNumber) {
   const completionImageDriveUrl = isLegacyRow
     ? _string(row[12])
     : _string(row[13]);
-  const submittedAt = isLegacyRow
-    ? _string(row[19])
-    : _string(row[14]);
-
   return {
     rowNumber: rowNumber,
     spreadsheetId: spreadsheetId,
@@ -301,7 +297,6 @@ function _mapSheetRowToSubmission(branchName, spreadsheetId, row, rowNumber) {
     beforeImageDriveUrl: beforeImageDriveUrl,
     afterImageDriveUrl: afterImageDriveUrl,
     completionImageDriveUrl: completionImageDriveUrl,
-    submittedAt: submittedAt,
   };
 }
 
@@ -343,8 +338,23 @@ function _ensureHeader(sheet) {
     'beforeImageDriveUrl',
     'afterImageDriveUrl',
     'completionImageDriveUrl',
-    'submittedAt',
   ]);
+}
+
+function _removeSubmittedAtColumnIfPresent(sheet) {
+  if (sheet.getLastRow() < 1) return;
+
+  const lastColumn = sheet.getLastColumn();
+  if (lastColumn < 1) return;
+
+  const headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
+  const submittedAtIndex = headers.findIndex((item) =>
+    String(item).trim().toLowerCase() === 'submittedat'
+  );
+
+  if (submittedAtIndex >= 0) {
+    sheet.deleteColumn(submittedAtIndex + 1);
+  }
 }
 
 function _parseJsonBody(e) {
@@ -407,4 +417,38 @@ function _toIsoString(value) {
   }
 
   return _string(value);
+}
+
+function _nowTimestamp() {
+  return Utilities.formatDate(
+    new Date(),
+    Session.getScriptTimeZone(),
+    "yyyy-MM-dd'T'HH:mm:ssXXX"
+  );
+}
+
+function _normalizeTimestamp(value) {
+  if (!value) return '';
+
+  if (Object.prototype.toString.call(value) === '[object Date]') {
+    return Utilities.formatDate(
+      value,
+      Session.getScriptTimeZone(),
+      "yyyy-MM-dd'T'HH:mm:ssXXX"
+    );
+  }
+
+  const asString = String(value).trim();
+  if (!asString) return '';
+
+  const parsed = new Date(asString);
+  if (!isNaN(parsed.getTime())) {
+    return Utilities.formatDate(
+      parsed,
+      Session.getScriptTimeZone(),
+      "yyyy-MM-dd'T'HH:mm:ssXXX"
+    );
+  }
+
+  return asString;
 }

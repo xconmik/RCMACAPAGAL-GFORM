@@ -6,6 +6,7 @@ import '../services/admin_service.dart';
 import '../services/allocation_service.dart';
 
 enum _AdminMenu { dashboard, entries, allocations, encoderArea }
+
 enum _HistoryRange { last7Days, last30Days, all }
 
 class AdminPanelScreen extends StatefulWidget {
@@ -27,11 +28,18 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   ];
 
   static const List<String> _brandOptions = ['MIGHTY', 'CAMEL', 'WINSTON'];
+  static const List<String> _allocationTypes = ['signage', 'awning', 'flange'];
+  static const Map<String, String> _allocationTypeLabels = {
+    'signage': 'Signage',
+    'awning': 'Awning',
+    'flange': 'Flange',
+  };
 
   final AdminService _adminService = AdminService();
   final AllocationService _allocationService = AllocationService();
   final TextEditingController _searchController = TextEditingController();
-  final TextEditingController _allocationAllController = TextEditingController();
+  final TextEditingController _allocationAllController =
+      TextEditingController();
   final Map<String, TextEditingController> _allocationControllers = {};
 
   _AdminMenu _activeMenu = _AdminMenu.dashboard;
@@ -50,9 +58,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
   AdminDashboardData? _dashboard;
   DateTime? _lastRefreshedAt;
-  Map<String, Map<String, int>> _allocations = {};
+  Map<String, Map<String, Map<String, int>>> _allocations = {};
 
   final DateFormat _displayDateFormat = DateFormat('MMM d, y h:mm a');
+  final DateFormat _dailyReportDateFormat = DateFormat('dd/MM/yyyy');
+
+  int _allocationValue(String branch, String brand, String type) {
+    return _allocations[branch]?[type]?[brand] ?? 0;
+  }
 
   @override
   void initState() {
@@ -79,6 +92,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     final allocations = await _allocationService.loadAllocations(
       branches: _branches.where((branch) => branch != 'ALL').toList(),
       brands: _brandOptions,
+      types: _allocationTypes,
     );
 
     if (!mounted) return;
@@ -92,15 +106,17 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   void _syncAllocationControllers() {
     for (final branch in _allocations.keys) {
       for (final brand in _brandOptions) {
-        final key = '$branch|$brand';
-        final target = _allocations[branch]?[brand] ?? 0;
-        final text = target == 0 ? '' : '$target';
+        for (final type in _allocationTypes) {
+          final key = '$branch|$brand|$type';
+          final target = _allocations[branch]?[type]?[brand] ?? 0;
+          final text = target == 0 ? '' : '$target';
 
-        if (_allocationControllers.containsKey(key)) {
-          final ctrl = _allocationControllers[key]!;
-          if (ctrl.text != text) ctrl.text = text;
-        } else {
-          _allocationControllers[key] = TextEditingController(text: text);
+          if (_allocationControllers.containsKey(key)) {
+            final ctrl = _allocationControllers[key]!;
+            if (ctrl.text != text) ctrl.text = text;
+          } else {
+            _allocationControllers[key] = TextEditingController(text: text);
+          }
         }
       }
     }
@@ -169,14 +185,21 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     for (final branch in branches) {
       _allocations.putIfAbsent(branch, () {
         changed = true;
-        return <String, int>{};
+        return <String, Map<String, int>>{};
       });
 
-      for (final brand in _brandOptions) {
-        _allocations[branch]!.putIfAbsent(brand, () {
+      for (final type in _allocationTypes) {
+        _allocations[branch]!.putIfAbsent(type, () {
           changed = true;
-          return 0;
+          return <String, int>{};
         });
+
+        for (final brand in _brandOptions) {
+          _allocations[branch]![type]!.putIfAbsent(brand, () {
+            changed = true;
+            return 0;
+          });
+        }
       }
     }
 
@@ -213,14 +236,16 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   void _syncAllocationsFromControllers() {
     for (final entry in _allocationControllers.entries) {
       final keyParts = entry.key.split('|');
-      if (keyParts.length != 2) continue;
+      if (keyParts.length != 3) continue;
 
       final branch = keyParts[0];
       final brand = keyParts[1];
+      final type = keyParts[2];
       final value = int.tryParse(entry.value.text.trim()) ?? 0;
 
-      _allocations[branch] ??= <String, int>{};
-      _allocations[branch]![brand] = value;
+      _allocations[branch] ??= <String, Map<String, int>>{};
+      _allocations[branch]![type] ??= <String, int>{};
+      _allocations[branch]![type]![brand] = value;
     }
   }
 
@@ -228,21 +253,26 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     final value = int.tryParse(_allocationAllController.text.trim());
     if (value == null || value < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid non-negative number for all allocation.')),
+        const SnackBar(
+            content:
+                Text('Enter a valid non-negative number for all allocation.')),
       );
       return;
     }
 
     for (final branch in _allocations.keys) {
-      _allocations[branch] ??= <String, int>{};
-      for (final brand in _brandOptions) {
-        _allocations[branch]![brand] = value;
-        final key = '$branch|$brand';
-        final text = value == 0 ? '' : '$value';
-        if (_allocationControllers.containsKey(key)) {
-          _allocationControllers[key]!.text = text;
-        } else {
-          _allocationControllers[key] = TextEditingController(text: text);
+      _allocations[branch] ??= <String, Map<String, int>>{};
+      for (final type in _allocationTypes) {
+        _allocations[branch]![type] ??= <String, int>{};
+        for (final brand in _brandOptions) {
+          _allocations[branch]![type]![brand] = value;
+          final key = '$branch|$brand|$type';
+          final text = value == 0 ? '' : '$value';
+          if (_allocationControllers.containsKey(key)) {
+            _allocationControllers[key]!.text = text;
+          } else {
+            _allocationControllers[key] = TextEditingController(text: text);
+          }
         }
       }
     }
@@ -298,7 +328,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               _buildFilterCard(),
               const SizedBox(height: 12),
               if (_isLoading)
-                const Expanded(child: Center(child: CircularProgressIndicator()))
+                const Expanded(
+                    child: Center(child: CircularProgressIndicator()))
               else if (_error != null)
                 Expanded(
                   child: Center(
@@ -412,7 +443,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
   Widget _buildActiveView() {
     final dashboard = _dashboard;
-    if (dashboard == null) return const Center(child: Text('No data available.'));
+    if (dashboard == null) {
+      return const Center(child: Text('No data available.'));
+    }
 
     switch (_activeMenu) {
       case _AdminMenu.dashboard:
@@ -439,13 +472,17 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           spacing: 10,
           runSpacing: 10,
           children: [
-            _kpiCard('Total Submissions', '${dashboard.totalSubmissions}', Icons.assignment_turned_in_outlined),
-            _kpiCard('Active Branches', '$activeBranchCount', Icons.store_mall_directory_outlined),
-            _kpiCard('Visible Rows', '${historyFiltered.length}', Icons.table_rows_outlined),
+            _kpiCard('Total Submissions', '${dashboard.totalSubmissions}',
+                Icons.assignment_turned_in_outlined),
+            _kpiCard('Active Branches', '$activeBranchCount',
+                Icons.store_mall_directory_outlined),
+            _kpiCard('Visible Rows', '${historyFiltered.length}',
+                Icons.table_rows_outlined),
           ],
         ),
         const SizedBox(height: 14),
-        const Text('History Range', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        const Text('History Range',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
@@ -453,17 +490,20 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             ChoiceChip(
               label: const Text('7 Days'),
               selected: _historyRange == _HistoryRange.last7Days,
-              onSelected: (_) => setState(() => _historyRange = _HistoryRange.last7Days),
+              onSelected: (_) =>
+                  setState(() => _historyRange = _HistoryRange.last7Days),
             ),
             ChoiceChip(
               label: const Text('30 Days'),
               selected: _historyRange == _HistoryRange.last30Days,
-              onSelected: (_) => setState(() => _historyRange = _HistoryRange.last30Days),
+              onSelected: (_) =>
+                  setState(() => _historyRange = _HistoryRange.last30Days),
             ),
             ChoiceChip(
               label: const Text('All'),
               selected: _historyRange == _HistoryRange.all,
-              onSelected: (_) => setState(() => _historyRange = _HistoryRange.all),
+              onSelected: (_) =>
+                  setState(() => _historyRange = _HistoryRange.all),
             ),
           ],
         ),
@@ -482,11 +522,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   }
 
   Widget _buildEntriesView(AdminDashboardData dashboard) {
-    final filtered = _applyHistoryFilter(_filteredSubmissions(dashboard.recentSubmissions));
+    final filtered =
+        _applyHistoryFilter(_filteredSubmissions(dashboard.recentSubmissions));
 
     return ListView(
       children: [
-        const Text('Branch Performance', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+        const Text('Branch Performance',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
         Card(
           elevation: 0,
@@ -523,10 +565,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                         children: [
                           Expanded(
                             child: Text(item.branch,
-                                style: const TextStyle(fontWeight: FontWeight.w700)),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700)),
                           ),
                           Text('${item.totalRows}',
-                              style: const TextStyle(fontWeight: FontWeight.w800)),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w800)),
                         ],
                       ),
                     ),
@@ -537,7 +581,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        const Text('Entries', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+        const Text('Entries',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
         Card(
           elevation: 0,
@@ -555,19 +600,20 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   }
 
   Widget _buildAllocationsView(AdminDashboardData dashboard) {
-    final actual = _computeActualBrandCounts(dashboard.recentSubmissions);
+    final stats = _computeEncoderStats(dashboard.recentSubmissions);
     final branchOptions = _branchOptions(includeAll: false);
 
     return ListView(
       children: [
         const Text(
-          'Branch Brand Allocation',
+          'Branch Brand Allocation (Per Item)',
           style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 8),
         Card(
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Wrap(
@@ -582,13 +628,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                     keyboardType: TextInputType.number,
                     enabled: !_isAllocationEditLocked,
                     decoration: const InputDecoration(
-                      labelText: 'Allocation for all',
+                      labelText: 'Allocation for all items',
                       hintText: 'e.g. 100',
                     ),
                   ),
                 ),
                 FilledButton.icon(
-                  onPressed: _isAllocationEditLocked ? null : _applyAllocationToAll,
+                  onPressed:
+                      _isAllocationEditLocked ? null : _applyAllocationToAll,
                   icon: const Icon(Icons.lock_outline),
                   label: const Text('Apply All & Lock'),
                 ),
@@ -598,15 +645,20 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                   label: const Text('Save Allocation & Lock'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: _isAllocationEditLocked ? _enableAllocationEdit : null,
+                  onPressed:
+                      _isAllocationEditLocked ? _enableAllocationEdit : null,
                   icon: const Icon(Icons.edit_outlined),
                   label: const Text('Enable Edit'),
                 ),
                 Text(
-                  _isAllocationEditLocked ? 'Status: Locked' : 'Status: Editable',
+                  _isAllocationEditLocked
+                      ? 'Status: Locked'
+                      : 'Status: Editable',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: _isAllocationEditLocked ? Colors.orange.shade800 : Colors.green.shade700,
+                    color: _isAllocationEditLocked
+                        ? Colors.orange.shade800
+                        : Colors.green.shade700,
                   ),
                 ),
               ],
@@ -615,65 +667,102 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         ),
         const SizedBox(height: 8),
         ...branchOptions.map((branch) {
+          final branchStats = stats[branch] ?? _emptyEncoderStats();
+
           return Card(
             elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(branch,
-                      style:
-                          const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 8),
                   ..._brandOptions.map((brand) {
-                    final key = '$branch|$brand';
-                    final controller = _allocationControllers[key] ?? TextEditingController();
-                    _allocationControllers.putIfAbsent(key, () => controller);
-                    final actualValue = actual[branch]?[brand] ?? 0;
-                    final targetValue = _allocations[branch]?[brand] ?? 0;
-                    final remainingValue = targetValue - actualValue;
+                    final item = branchStats[brand] ?? const _EncoderMetrics();
+
+                    final typeInstalled = {
+                      'signage': item.signageTotal,
+                      'awning': item.awningTotal,
+                      'flange': item.flangeTotal,
+                    };
 
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Text(
-                              brand,
-                              style: const TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 120,
-                            child: TextField(
-                              controller: controller,
-                              keyboardType: TextInputType.number,
-                              enabled: !_isAllocationEditLocked,
-                              decoration: const InputDecoration(
-                                labelText: 'Allocation',
-                              ),
-                              onChanged: (value) {
-                                final parsed = int.tryParse(value.trim()) ?? 0;
-                                setState(() {
-                                  _allocations[branch] ??= {};
-                                  _allocations[branch]![brand] = parsed;
-                                });
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Text('Installed: $actualValue'),
-                          const SizedBox(width: 10),
                           Text(
-                            'Remaining: $remainingValue',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: remainingValue < 0
-                                  ? Colors.red
-                                  : Colors.green.shade700,
-                            ),
+                            brand,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: _allocationTypes.map((type) {
+                              final key = '$branch|$brand|$type';
+                              final controller = _allocationControllers[key] ??
+                                  TextEditingController();
+                              _allocationControllers.putIfAbsent(
+                                  key, () => controller);
+
+                              final installed = typeInstalled[type] ?? 0;
+                              final allocation =
+                                  _allocationValue(branch, brand, type);
+                              final remaining = allocation - installed;
+
+                              return SizedBox(
+                                width: 260,
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: controller,
+                                        keyboardType: TextInputType.number,
+                                        enabled: !_isAllocationEditLocked,
+                                        decoration: InputDecoration(
+                                          labelText:
+                                              '${_allocationTypeLabels[type]} Allocation',
+                                        ),
+                                        onChanged: (value) {
+                                          final parsed =
+                                              int.tryParse(value.trim()) ?? 0;
+                                          setState(() {
+                                            _allocations[branch] ??=
+                                                <String, Map<String, int>>{};
+                                            _allocations[branch]![type] ??=
+                                                <String, int>{};
+                                            _allocations[branch]![type]![
+                                                brand] = parsed;
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Inst: $installed',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w600),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Bal: $remaining',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: remaining < 0
+                                            ? Colors.red
+                                            : Colors.green.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
                           ),
                         ],
                       ),
@@ -708,14 +797,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         const SizedBox(height: 8),
         ...branchesToShow.map((branch) {
           final branchStats = stats[branch] ?? _emptyEncoderStats();
-
-          final totalAllocation = _brandOptions
-              .map((brand) => _allocations[branch]?[brand] ?? 0)
-              .fold<int>(0, (sum, value) => sum + value);
-          final totalInstalled = _brandOptions
-              .map((brand) => branchStats[brand]?.installedCount ?? 0)
-              .fold<int>(0, (sum, value) => sum + value);
-          final totalBalance = totalAllocation - totalInstalled;
+          final dailyReports =
+              _computeDailyReportsForBranch(dashboard.recentSubmissions, branch);
 
           final totalSignage = _brandOptions
               .map((brand) => branchStats[brand]?.signageTotal ?? 0)
@@ -726,6 +809,20 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           final totalFlange = _brandOptions
               .map((brand) => branchStats[brand]?.flangeTotal ?? 0)
               .fold<int>(0, (sum, value) => sum + value);
+
+          final totalSignageAllocation = _brandOptions
+              .map((brand) => _allocationValue(branch, brand, 'signage'))
+              .fold<int>(0, (sum, value) => sum + value);
+          final totalAwningAllocation = _brandOptions
+              .map((brand) => _allocationValue(branch, brand, 'awning'))
+              .fold<int>(0, (sum, value) => sum + value);
+          final totalFlangeAllocation = _brandOptions
+              .map((brand) => _allocationValue(branch, brand, 'flange'))
+              .fold<int>(0, (sum, value) => sum + value);
+
+          final totalSignageBalance = totalSignageAllocation - totalSignage;
+          final totalAwningBalance = totalAwningAllocation - totalAwning;
+          final totalFlangeBalance = totalFlangeAllocation - totalFlange;
 
           final dailySignage = _brandOptions
               .map((brand) => branchStats[brand]?.dailySignage ?? 0)
@@ -739,7 +836,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
           return Card(
             elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
@@ -747,23 +845,42 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 children: [
                   Text(
                     branch,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      _miniStat('Total Allocation', '$totalAllocation'),
-                      _miniStat('Total Installed', '$totalInstalled'),
                       _miniStat(
-                        'Total Balance',
-                        '$totalBalance',
-                        valueColor: totalBalance < 0 ? Colors.red : Colors.green.shade700,
+                          'Signage Allocation', '$totalSignageAllocation'),
+                      _miniStat('Signage Installed Qty', '$totalSignage'),
+                      _miniStat(
+                        'Signage Balance',
+                        '$totalSignageBalance',
+                        valueColor: totalSignageBalance < 0
+                            ? Colors.red
+                            : Colors.green.shade700,
                       ),
-                      _miniStat('Total Qty Signage', '$totalSignage'),
-                      _miniStat('Total Qty Awning', '$totalAwning'),
-                      _miniStat('Total Qty Flange', '$totalFlange'),
+                      _miniStat('Awning Allocation', '$totalAwningAllocation'),
+                      _miniStat('Awning Installed Qty', '$totalAwning'),
+                      _miniStat(
+                        'Awning Balance',
+                        '$totalAwningBalance',
+                        valueColor: totalAwningBalance < 0
+                            ? Colors.red
+                            : Colors.green.shade700,
+                      ),
+                      _miniStat('Flange Allocation', '$totalFlangeAllocation'),
+                      _miniStat('Flange Installed Qty', '$totalFlange'),
+                      _miniStat(
+                        'Flange Balance',
+                        '$totalFlangeBalance',
+                        valueColor: totalFlangeBalance < 0
+                            ? Colors.red
+                            : Colors.green.shade700,
+                      ),
                       _miniStat('Daily Signage', '$dailySignage'),
                       _miniStat('Daily Awning', '$dailyAwning'),
                       _miniStat('Daily Flange', '$dailyFlange'),
@@ -773,33 +890,52 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: DataTable(
-                      headingTextStyle: const TextStyle(fontWeight: FontWeight.w800),
+                      headingTextStyle:
+                          const TextStyle(fontWeight: FontWeight.w800),
                       columns: const [
                         DataColumn(label: Text('Brand')),
-                        DataColumn(label: Text('Allocation')),
-                        DataColumn(label: Text('Installed')),
-                        DataColumn(label: Text('Balance')),
-                        DataColumn(label: Text('Qty Signage')),
-                        DataColumn(label: Text('Qty Awning')),
-                        DataColumn(label: Text('Qty Flange')),
+                        DataColumn(label: Text('Signage Qty')),
+                        DataColumn(label: Text('Signage Allocation')),
+                        DataColumn(label: Text('Signage Balance')),
+                        DataColumn(label: Text('Awning Qty')),
+                        DataColumn(label: Text('Awning Allocation')),
+                        DataColumn(label: Text('Awning Balance')),
+                        DataColumn(label: Text('Flange Qty')),
+                        DataColumn(label: Text('Flange Allocation')),
+                        DataColumn(label: Text('Flange Balance')),
                         DataColumn(label: Text('Daily Signage')),
                         DataColumn(label: Text('Daily Awning')),
                         DataColumn(label: Text('Daily Flange')),
                       ],
                       rows: _brandOptions.map((brand) {
-                        final item = branchStats[brand] ?? const _EncoderMetrics();
-                        final allocation = _allocations[branch]?[brand] ?? 0;
-                        final balance = allocation - item.installedCount;
+                        final item =
+                            branchStats[brand] ?? const _EncoderMetrics();
+                        final signageAllocation =
+                            _allocationValue(branch, brand, 'signage');
+                        final awningAllocation =
+                            _allocationValue(branch, brand, 'awning');
+                        final flangeAllocation =
+                            _allocationValue(branch, brand, 'flange');
+
+                        final signageBalance =
+                            signageAllocation - item.signageTotal;
+                        final awningBalance =
+                            awningAllocation - item.awningTotal;
+                        final flangeBalance =
+                            flangeAllocation - item.flangeTotal;
 
                         return DataRow(
                           cells: [
                             DataCell(Text(brand)),
-                            DataCell(Text('$allocation')),
-                            DataCell(Text('${item.installedCount}')),
-                            DataCell(Text('$balance')),
                             DataCell(Text('${item.signageTotal}')),
+                            DataCell(Text('$signageAllocation')),
+                            DataCell(Text('$signageBalance')),
                             DataCell(Text('${item.awningTotal}')),
+                            DataCell(Text('$awningAllocation')),
+                            DataCell(Text('$awningBalance')),
                             DataCell(Text('${item.flangeTotal}')),
+                            DataCell(Text('$flangeAllocation')),
+                            DataCell(Text('$flangeBalance')),
                             DataCell(Text('${item.dailySignage}')),
                             DataCell(Text('${item.dailyAwning}')),
                             DataCell(Text('${item.dailyFlange}')),
@@ -808,6 +944,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                       }).toList(),
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  _buildDailyReportsSection(branch, dailyReports),
                 ],
               ),
             ),
@@ -844,8 +982,90 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 
+  Widget _buildDailyReportsSection(String branch, List<_DailyReport> reports) {
+    if (reports.isEmpty) {
+      return const Text(
+        'No daily reports available yet.',
+        style: TextStyle(color: Colors.black54),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Daily Reports',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 8),
+        ...reports.map((report) {
+          return Card(
+            elevation: 0,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$branch DAILY REPORT ${_dailyReportDateFormat.format(report.date)}',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildDailyTypeTable(
+                    typeLabel: 'FLANGE',
+                    values: report.valuesByTypeByBrand['flange'] ??
+                        {for (final brand in _brandOptions) brand: 0},
+                  ),
+                  const SizedBox(height: 8),
+                  _buildDailyTypeTable(
+                    typeLabel: 'AWNINGS',
+                    values: report.valuesByTypeByBrand['awning'] ??
+                        {for (final brand in _brandOptions) brand: 0},
+                  ),
+                  const SizedBox(height: 8),
+                  _buildDailyTypeTable(
+                    typeLabel: 'SIGNAGE',
+                    values: report.valuesByTypeByBrand['signage'] ??
+                        {for (final brand in _brandOptions) brand: 0},
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildDailyTypeTable({
+    required String typeLabel,
+    required Map<String, int> values,
+  }) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        headingTextStyle: const TextStyle(fontWeight: FontWeight.w800),
+        columns: [
+          DataColumn(label: Text(typeLabel)),
+          const DataColumn(label: Text('TOTAL QTY')),
+        ],
+        rows: _brandOptions.map((brand) {
+          return DataRow(
+            cells: [
+              DataCell(Text(brand)),
+              DataCell(Text('${values[brand] ?? 0}')),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   Widget _buildLoadMoreButton(AdminDashboardData dashboard, int visibleCount) {
-    final hasMore = dashboard.totalSubmissions > dashboard.recentSubmissions.length;
+    final hasMore =
+        dashboard.totalSubmissions > dashboard.recentSubmissions.length;
     if (!hasMore) {
       return const Text('All available history loaded.',
           style: TextStyle(color: Colors.black54));
@@ -901,8 +1121,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         final isDeleting = _deletingEntryKeys.contains(entryKey);
         final canDelete = entry.rowNumber != null && entry.rowNumber! > 1;
         final hasImages = entry.beforeImageDriveUrl.trim().isNotEmpty ||
-          entry.afterImageDriveUrl.trim().isNotEmpty ||
-          entry.completionImageDriveUrl.trim().isNotEmpty;
+            entry.afterImageDriveUrl.trim().isNotEmpty ||
+            entry.completionImageDriveUrl.trim().isNotEmpty;
 
         return Padding(
           padding: const EdgeInsets.all(12),
@@ -913,13 +1133,17 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      entry.outletCode.isEmpty ? '(No outlet code)' : entry.outletCode,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                      entry.outletCode.isEmpty
+                          ? '(No outlet code)'
+                          : entry.outletCode,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w800),
                     ),
                   ),
                   IconButton(
                     tooltip: hasImages ? 'View images' : 'No images available',
-                    onPressed: hasImages ? () => _showImagesDialog(entry) : null,
+                    onPressed:
+                        hasImages ? () => _showImagesDialog(entry) : null,
                     icon: const Icon(Icons.photo_library_outlined),
                   ),
                   IconButton(
@@ -942,7 +1166,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               ),
               const SizedBox(height: 6),
               Text('Timestamp: ${_formatEntryTimestamp(entry)}'),
-              Text('Installer Name: ${entry.fullName.isEmpty ? '-' : entry.fullName}'),
+              Text(
+                  'Installer Name: ${entry.fullName.isEmpty ? '-' : entry.fullName}'),
               Text('Brand: ${entry.brands.isEmpty ? '-' : entry.brands}'),
               Text('Owner: ${entry.storeOwnerName}'),
               Text('Signage Name: ${entry.signageName}'),
@@ -978,7 +1203,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                   const SizedBox(height: 12),
                   _buildImagePreviewTile('After', entry.afterImageDriveUrl),
                   const SizedBox(height: 12),
-                  _buildImagePreviewTile('Completion', entry.completionImageDriveUrl),
+                  _buildImagePreviewTile(
+                      'Completion', entry.completionImageDriveUrl),
                 ],
               ),
             ),
@@ -1036,7 +1262,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                   padding: const EdgeInsets.all(12),
                   alignment: Alignment.centerLeft,
                   color: Colors.grey.shade100,
-                  child: const Text('Unable to load image. Check file sharing permissions.'),
+                  child: const Text(
+                      'Unable to load image. Check file sharing permissions.'),
                 );
               },
             ),
@@ -1045,11 +1272,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 
-  Future<void> _confirmDeleteEntry(AdminSubmission entry, String entryKey) async {
+  Future<void> _confirmDeleteEntry(
+      AdminSubmission entry, String entryKey) async {
     final rowNumber = entry.rowNumber;
     if (rowNumber == null || rowNumber <= 1) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to delete this entry. Missing row reference.')),
+        const SnackBar(
+            content:
+                Text('Unable to delete this entry. Missing row reference.')),
       );
       return;
     }
@@ -1081,7 +1311,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     });
 
     try {
-      await _adminService.deleteEntry(branch: entry.branch, rowNumber: rowNumber);
+      await _adminService.deleteEntry(
+          branch: entry.branch, rowNumber: rowNumber);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Entry deleted successfully.')),
@@ -1155,10 +1386,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             children: [
               Icon(icon),
               const SizedBox(height: 8),
-              Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+              Text(label,
+                  style: const TextStyle(fontSize: 12, color: Colors.black54)),
               const SizedBox(height: 4),
               Text(value,
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+                  style: const TextStyle(
+                      fontSize: 22, fontWeight: FontWeight.w900)),
             ],
           ),
         ),
@@ -1166,7 +1399,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 
-  List<AdminSubmission> _filteredSubmissions(List<AdminSubmission> submissions) {
+  List<AdminSubmission> _filteredSubmissions(
+      List<AdminSubmission> submissions) {
     return submissions.where((submission) {
       if (_searchQuery.isEmpty) return true;
       final text =
@@ -1188,35 +1422,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       if (date == null) return false;
       return date.isAfter(cutoff) || date.isAtSameMomentAs(cutoff);
     }).toList();
-  }
-
-  Map<String, Map<String, int>> _computeActualBrandCounts(
-    List<AdminSubmission> submissions,
-  ) {
-    final result = <String, Map<String, int>>{};
-
-    for (final branch in _branchOptions(includeAll: false)) {
-      result[branch] = {for (final brand in _brandOptions) brand: 0};
-    }
-
-    for (final submission in submissions) {
-      final branch = submission.branch;
-      if (!result.containsKey(branch)) continue;
-
-      final brandTokens = submission.brands
-          .split(',')
-          .map((item) => item.trim().toUpperCase())
-          .where((item) => item.isNotEmpty)
-          .toSet();
-
-      for (final brand in _brandOptions) {
-        if (brandTokens.contains(brand)) {
-          result[branch]![brand] = (result[branch]![brand] ?? 0) + 1;
-        }
-      }
-    }
-
-    return result;
   }
 
   Map<String, Map<String, _EncoderMetrics>> _computeEncoderStats(
@@ -1275,6 +1480,66 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     return {for (final brand in _brandOptions) brand: const _EncoderMetrics()};
   }
 
+  List<_DailyReport> _computeDailyReportsForBranch(
+    List<AdminSubmission> submissions,
+    String branch,
+  ) {
+    final byDate = <String, _DailyReportAccumulator>{};
+
+    for (final submission in submissions) {
+      if (submission.branch != branch) continue;
+
+      final submittedDate = _parseSubmissionDate(submission);
+      if (submittedDate == null) continue;
+
+      final dateKey = DateFormat('yyyy-MM-dd').format(submittedDate);
+      final report = byDate.putIfAbsent(
+        dateKey,
+        () => _DailyReportAccumulator(
+          date: DateTime(submittedDate.year, submittedDate.month, submittedDate.day),
+          valuesByTypeByBrand: {
+            for (final type in _allocationTypes)
+              type: {for (final brand in _brandOptions) brand: 0},
+          },
+        ),
+      );
+
+      final brands = submission.brands
+          .split(',')
+          .map((item) => item.trim().toUpperCase())
+          .where((item) => item.isNotEmpty)
+          .toSet();
+      if (brands.isEmpty) continue;
+
+      final signage = _parseQuantity(submission.signageQuantity);
+      final awning = _parseQuantity(submission.awningQuantity);
+      final flange = _parseQuantity(submission.flangeQuantity);
+
+      for (final brand in _brandOptions) {
+        if (!brands.contains(brand)) continue;
+
+        report.valuesByTypeByBrand['signage']![brand] =
+            (report.valuesByTypeByBrand['signage']![brand] ?? 0) + signage;
+        report.valuesByTypeByBrand['awning']![brand] =
+            (report.valuesByTypeByBrand['awning']![brand] ?? 0) + awning;
+        report.valuesByTypeByBrand['flange']![brand] =
+            (report.valuesByTypeByBrand['flange']![brand] ?? 0) + flange;
+      }
+    }
+
+    final reports = byDate.values
+        .map(
+          (item) => _DailyReport(
+            date: item.date,
+            valuesByTypeByBrand: item.valuesByTypeByBrand,
+          ),
+        )
+        .toList();
+
+    reports.sort((a, b) => b.date.compareTo(a.date));
+    return reports;
+  }
+
   int _parseQuantity(String value) {
     return int.tryParse(value.trim()) ?? 0;
   }
@@ -1319,4 +1584,24 @@ class _EncoderMetrics {
   final int dailySignage;
   final int dailyAwning;
   final int dailyFlange;
+}
+
+class _DailyReport {
+  const _DailyReport({
+    required this.date,
+    required this.valuesByTypeByBrand,
+  });
+
+  final DateTime date;
+  final Map<String, Map<String, int>> valuesByTypeByBrand;
+}
+
+class _DailyReportAccumulator {
+  _DailyReportAccumulator({
+    required this.date,
+    required this.valuesByTypeByBrand,
+  });
+
+  final DateTime date;
+  final Map<String, Map<String, int>> valuesByTypeByBrand;
 }
