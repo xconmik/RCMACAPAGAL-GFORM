@@ -48,7 +48,7 @@ class UploadService {
     if (decoded is Map<String, dynamic>) {
       final fileUrl = decoded['fileUrl'] ?? decoded['url'] ?? decoded['driveUrl'];
       if (fileUrl is String && fileUrl.trim().isNotEmpty) {
-        return fileUrl;
+        return _normalizeDriveImageUrl(fileUrl);
       }
     }
 
@@ -97,7 +97,7 @@ class UploadService {
 
       final fileUrl = decoded['fileUrl'] ?? decoded['url'] ?? decoded['driveUrl'];
       if (fileUrl is String && fileUrl.trim().isNotEmpty) {
-        return fileUrl;
+        return _normalizeDriveImageUrl(fileUrl);
       }
     }
 
@@ -176,5 +176,49 @@ class UploadService {
         statusCode == HttpStatus.seeOther ||
         statusCode == HttpStatus.temporaryRedirect ||
         statusCode == HttpStatus.permanentRedirect;
+  }
+
+  String _normalizeDriveImageUrl(String url) {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return trimmed;
+
+    final fileId = _extractDriveFileId(trimmed);
+    if (fileId.isEmpty) return trimmed;
+
+    return Uri.https('drive.google.com', '/thumbnail', <String, String>{
+      'id': fileId,
+      'sz': 'w1600',
+    }).toString();
+  }
+
+  String _extractDriveFileId(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return '';
+
+    final host = uri.host.toLowerCase();
+    if (!host.contains('drive.google.com') && !host.contains('docs.google.com')) {
+      return '';
+    }
+
+    final queryId = uri.queryParameters['id']?.trim() ?? '';
+    if (queryId.isNotEmpty) return queryId;
+
+    final segments = uri.pathSegments;
+    final fileSegmentIndex = segments.indexOf('d');
+    if (fileSegmentIndex >= 0 && fileSegmentIndex + 1 < segments.length) {
+      final id = segments[fileSegmentIndex + 1].trim();
+      if (id.isNotEmpty) return id;
+    }
+
+    final rawPath = uri.path;
+    const filePrefix = '/file/d/';
+    final prefixIndex = rawPath.indexOf(filePrefix);
+    if (prefixIndex >= 0) {
+      final tail = rawPath.substring(prefixIndex + filePrefix.length);
+      final id = tail.split('/').first.trim();
+      if (id.isNotEmpty) return id;
+    }
+
+    return '';
   }
 }

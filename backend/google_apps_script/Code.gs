@@ -127,6 +127,7 @@ function _handleUploadImage(e) {
 
   const blob = Utilities.newBlob(bytes, mimeType, fileName);
   const file = folder.createFile(blob);
+  const fileId = file.getId();
 
   const description = [
     'GPS Latitude: ' + String(body.latitude),
@@ -135,12 +136,16 @@ function _handleUploadImage(e) {
   ].join('\n');
 
   file.setDescription(description);
+  _setDriveFilePublicView(file);
+
+  const previewUrl = _buildDrivePreviewUrl(fileId);
 
   return _jsonResponse({
     success: true,
-    fileId: file.getId(),
+    fileId: fileId,
     fileName: file.getName(),
-    fileUrl: file.getUrl(),
+    fileUrl: previewUrl,
+    rawFileUrl: file.getUrl(),
     scriptTimestamp: _nowTimestamp(),
   }, 200);
 }
@@ -297,15 +302,19 @@ function _mapSheetRowToSubmission(branchName, spreadsheetId, row, rowNumber) {
   const flangeQuantity = isLegacyRow
     ? _string(row[9])
     : (isSplitLocationRow ? _string(row[12]) : _string(row[10]));
-  const beforeImageDriveUrl = isLegacyRow
+  const beforeImageDriveUrlRaw = isLegacyRow
     ? _string(row[10])
     : (isSplitLocationRow ? _string(row[13]) : _string(row[11]));
-  const afterImageDriveUrl = isLegacyRow
+  const afterImageDriveUrlRaw = isLegacyRow
     ? _string(row[11])
     : (isSplitLocationRow ? _string(row[14]) : _string(row[12]));
-  const completionImageDriveUrl = isLegacyRow
+  const completionImageDriveUrlRaw = isLegacyRow
     ? _string(row[12])
     : (isSplitLocationRow ? _string(row[15]) : _string(row[13]));
+
+  const beforeImageDriveUrl = _normalizeDriveImageUrl(beforeImageDriveUrlRaw);
+  const afterImageDriveUrl = _normalizeDriveImageUrl(afterImageDriveUrlRaw);
+  const completionImageDriveUrl = _normalizeDriveImageUrl(completionImageDriveUrlRaw);
 
   const purok = isLegacyRow
     ? _string(rawPayload.purok)
@@ -645,4 +654,42 @@ function _normalizeTimestamp(value) {
   }
 
   return asString;
+}
+
+function _setDriveFilePublicView(file) {
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (error) {
+  }
+}
+
+function _normalizeDriveImageUrl(url) {
+  const text = _string(url).trim();
+  if (!text) return '';
+
+  const fileId = _extractDriveFileId(text);
+  if (!fileId) return text;
+
+  return _buildDrivePreviewUrl(fileId);
+}
+
+function _buildDrivePreviewUrl(fileId) {
+  return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(fileId) + '&sz=w1600';
+}
+
+function _extractDriveFileId(url) {
+  const text = _string(url).trim();
+  if (!text) return '';
+
+  const queryIdMatch = text.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (queryIdMatch && queryIdMatch[1]) {
+    return queryIdMatch[1];
+  }
+
+  const filePathMatch = text.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (filePathMatch && filePathMatch[1]) {
+    return filePathMatch[1];
+  }
+
+  return '';
 }

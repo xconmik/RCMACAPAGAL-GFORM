@@ -236,6 +236,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 
+  Future<void> _refreshDashboard() async {
+    _syncAllocationsFromControllers();
+    await _allocationService.saveAllocations(_allocations);
+    await _loadData();
+  }
+
   void _syncAllocationsFromControllers() {
     for (final entry in _allocationControllers.entries) {
       final keyParts = entry.key.split('|');
@@ -252,7 +258,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     }
   }
 
-  void _applyAllocationToAll() {
+  Future<void> _applyAllocationToAll() async {
     final value = int.tryParse(_allocationAllController.text.trim());
     if (value == null || value < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -283,6 +289,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     setState(() {
       _isAllocationEditLocked = true;
     });
+
+    await _allocationService.saveAllocations(_allocations);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Allocation applied, saved, and locked.')),
+    );
   }
 
   void _enableAllocationEdit() {
@@ -298,7 +310,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         title: const Text('Admin Dashboard'),
         actions: [
           IconButton(
-            onPressed: _isLoading ? null : _loadData,
+            onPressed: _isLoading ? null : _refreshDashboard,
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -637,8 +649,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                   ),
                 ),
                 FilledButton.icon(
-                  onPressed:
-                      _isAllocationEditLocked ? null : _applyAllocationToAll,
+                  onPressed: _isAllocationEditLocked
+                      ? null
+                      : () {
+                          _applyAllocationToAll();
+                        },
                   icon: const Icon(Icons.lock_outline),
                   label: const Text('Apply All & Lock'),
                 ),
@@ -946,7 +961,88 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                             DataCell(Text('$flangeBalance')),
                           ],
                         );
-                      }).toList(),
+                      }).toList()
+                        ..add(
+                          DataRow(
+                            cells: [
+                              const DataCell(
+                                Text(
+                                  'TOTAL',
+                                  style: TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  '$totalSignage',
+                                  style: const TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  '$totalSignageAllocation',
+                                  style: const TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  '$totalSignageBalance',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: totalSignageBalance < 0
+                                        ? Colors.red
+                                        : Colors.green.shade700,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  '$totalAwning',
+                                  style: const TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  '$totalAwningAllocation',
+                                  style: const TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  '$totalAwningBalance',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: totalAwningBalance < 0
+                                        ? Colors.red
+                                        : Colors.green.shade700,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  '$totalFlange',
+                                  style: const TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  '$totalFlangeAllocation',
+                                  style: const TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  '$totalFlangeBalance',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: totalFlangeBalance < 0
+                                        ? Colors.red
+                                        : Colors.green.shade700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ),
                   ),
                 ],
@@ -1018,6 +1114,17 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             DateFormat('yyyy-MM-dd').format(report.date) == selectedDateKey,
       );
     }
+    final flangeValues = selectedReport?.valuesByTypeByBrand['flange'] ??
+      {for (final brand in _brandOptions) brand: 0};
+    final awningValues = selectedReport?.valuesByTypeByBrand['awning'] ??
+      {for (final brand in _brandOptions) brand: 0};
+    final signageValues = selectedReport?.valuesByTypeByBrand['signage'] ??
+      {for (final brand in _brandOptions) brand: 0};
+
+    final flangeTotal = _computeDailyTypeTotal(flangeValues);
+    final awningTotal = _computeDailyTypeTotal(awningValues);
+    final signageTotal = _computeDailyTypeTotal(signageValues);
+    final selectedReportGrandTotal = flangeTotal + awningTotal + signageTotal;
 
     return Card(
       elevation: 0,
@@ -1099,20 +1206,28 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               const SizedBox(height: 8),
               _buildDailyTypeTable(
                 typeLabel: 'FLANGE',
-                values: selectedReport.valuesByTypeByBrand['flange'] ??
-                    {for (final brand in _brandOptions) brand: 0},
+                values: flangeValues,
               ),
               const SizedBox(height: 8),
               _buildDailyTypeTable(
                 typeLabel: 'AWNINGS',
-                values: selectedReport.valuesByTypeByBrand['awning'] ??
-                    {for (final brand in _brandOptions) brand: 0},
+                values: awningValues,
               ),
               const SizedBox(height: 8),
               _buildDailyTypeTable(
                 typeLabel: 'SIGNAGE',
-                values: selectedReport.valuesByTypeByBrand['signage'] ??
-                    {for (final brand in _brandOptions) brand: 0},
+                values: signageValues,
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'TOTAL: $selectedReportGrandTotal',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                  ),
+                ),
               ),
             ],
           ],
@@ -1121,10 +1236,18 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 
+  int _computeDailyTypeTotal(Map<String, int> values) {
+    return _brandOptions
+        .map((brand) => values[brand] ?? 0)
+        .fold<int>(0, (sum, value) => sum + value);
+  }
+
   Widget _buildDailyTypeTable({
     required String typeLabel,
     required Map<String, int> values,
   }) {
+    final typeTotal = _computeDailyTypeTotal(values);
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
@@ -1133,14 +1256,32 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           DataColumn(label: Text(typeLabel)),
           const DataColumn(label: Text('TOTAL QTY')),
         ],
-        rows: _brandOptions.map((brand) {
-          return DataRow(
+        rows: [
+          ..._brandOptions.map((brand) {
+            return DataRow(
+              cells: [
+                DataCell(Text(brand)),
+                DataCell(Text('${values[brand] ?? 0}')),
+              ],
+            );
+          }),
+          DataRow(
             cells: [
-              DataCell(Text(brand)),
-              DataCell(Text('${values[brand] ?? 0}')),
+              const DataCell(
+                Text(
+                  'SUBTOTAL',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+              DataCell(
+                Text(
+                  '$typeTotal',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
             ],
-          );
-        }).toList(),
+          ),
+        ],
       ),
     );
   }
@@ -1304,6 +1445,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
   Widget _buildImagePreviewTile(String label, String url) {
     final normalized = url.trim();
+    final previewUrl = _resolveImagePreviewUrl(normalized);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1321,37 +1463,203 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             child: const Text('No image URL available.'),
           )
         else
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Image.network(
-              normalized,
-              fit: BoxFit.cover,
-              height: 180,
-              width: double.infinity,
-              loadingBuilder: (context, child, progress) {
-                if (progress == null) return child;
-                return Container(
-                  height: 180,
-                  alignment: Alignment.center,
-                  color: Colors.grey.shade100,
-                  child: const CircularProgressIndicator(),
-                );
-              },
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  height: 180,
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  alignment: Alignment.centerLeft,
-                  color: Colors.grey.shade100,
-                  child: const Text(
-                      'Unable to load image. Check file sharing permissions.'),
-                );
-              },
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => _showImageFullscreen(
+                label: label,
+                imageUrl: previewUrl,
+                fallbackUrl: normalized,
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Stack(
+                  children: [
+                    _buildPreviewImage(previewUrl, normalized),
+                    Positioned(
+                      right: 10,
+                      bottom: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.open_in_full,
+                                size: 14, color: Colors.white),
+                            SizedBox(width: 4),
+                            Text(
+                              'Tap to expand',
+                              style: TextStyle(
+                                  color: Colors.white, fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
       ],
     );
+  }
+
+  Future<void> _showImageFullscreen({
+    required String label,
+    required String imageUrl,
+    required String fallbackUrl,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(16),
+          child: SizedBox(
+            width: MediaQuery.of(context).size.width * 0.9,
+            height: MediaQuery.of(context).size.height * 0.9,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '$label Image',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w800, fontSize: 16),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Close',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: InteractiveViewer(
+                    minScale: 1,
+                    maxScale: 5,
+                    child: Center(
+                      child: _buildPreviewImage(imageUrl, fallbackUrl),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPreviewImage(String imageUrl, String fallbackUrl) {
+    return Image.network(
+      imageUrl,
+      webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+      fit: BoxFit.cover,
+      height: 180,
+      width: double.infinity,
+      loadingBuilder: (context, child, progress) {
+        if (progress == null) return child;
+        return _buildImageLoadingPlaceholder();
+      },
+      errorBuilder: (context, error, stackTrace) {
+        if (imageUrl != fallbackUrl) {
+          return Image.network(
+            fallbackUrl,
+            webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+            fit: BoxFit.cover,
+            height: 180,
+            width: double.infinity,
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) return child;
+              return _buildImageLoadingPlaceholder();
+            },
+            errorBuilder: (context, error, stackTrace) {
+              return _buildImageErrorPlaceholder();
+            },
+          );
+        }
+
+        return _buildImageErrorPlaceholder();
+      },
+    );
+  }
+
+  Widget _buildImageLoadingPlaceholder() {
+    return Container(
+      height: 180,
+      alignment: Alignment.center,
+      color: Colors.grey.shade100,
+      child: const CircularProgressIndicator(),
+    );
+  }
+
+  Widget _buildImageErrorPlaceholder() {
+    return Container(
+      height: 180,
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      alignment: Alignment.centerLeft,
+      color: Colors.grey.shade100,
+      child: const Text('Unable to load image. Check file sharing permissions.'),
+    );
+  }
+
+  String _resolveImagePreviewUrl(String url) {
+    if (url.isEmpty) return url;
+
+    final fileId = _extractGoogleDriveFileId(url);
+    if (fileId == null || fileId.isEmpty) return url;
+
+    return Uri.https('drive.google.com', '/thumbnail', <String, String>{
+      'id': fileId,
+      'sz': 'w1600',
+    }).toString();
+  }
+
+  String? _extractGoogleDriveFileId(String url) {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null) return null;
+
+    final host = uri.host.toLowerCase();
+    if (!host.contains('drive.google.com') && !host.contains('docs.google.com')) {
+      return null;
+    }
+
+    final queryId = uri.queryParameters['id']?.trim();
+    if (queryId != null && queryId.isNotEmpty) {
+      return queryId;
+    }
+
+    final segments = uri.pathSegments;
+    final fileSegmentIndex = segments.indexOf('d');
+    if (fileSegmentIndex >= 0 && fileSegmentIndex + 1 < segments.length) {
+      final id = segments[fileSegmentIndex + 1].trim();
+      if (id.isNotEmpty) return id;
+    }
+
+    final rawPath = uri.path;
+    const filePrefix = '/file/d/';
+    final prefixIndex = rawPath.indexOf(filePrefix);
+    if (prefixIndex >= 0) {
+      final tail = rawPath.substring(prefixIndex + filePrefix.length);
+      final id = tail.split('/').first.trim();
+      if (id.isNotEmpty) return id;
+    }
+
+    return null;
   }
 
   Future<void> _confirmDeleteEntry(
