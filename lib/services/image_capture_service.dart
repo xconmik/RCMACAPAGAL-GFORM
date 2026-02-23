@@ -1,6 +1,7 @@
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:typed_data';
 
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
@@ -12,12 +13,10 @@ class ImageCaptureService {
   ImageCaptureService({LocationService? locationService})
       : _locationService = locationService ?? LocationService();
 
-  static const String _logoAssetPath = 'assets/logo.jpg';
   static const int _maxDimension = 1280;
 
   final LocationService _locationService;
   final ImagePicker _picker = ImagePicker();
-  img.Image? _cachedLogo;
 
   Future<CapturedImageData?> captureWithGps({
     ImageSource source = ImageSource.camera,
@@ -33,12 +32,25 @@ class ImageCaptureService {
 
     if (pickedFile == null) return null;
 
-    final position = await _locationService.getCurrentPosition();
+    var latitude = 0.0;
+    var longitude = 0.0;
+    var hasLocation = false;
+
+    try {
+      final position = await _locationService.getCurrentPosition();
+      latitude = position.latitude;
+      longitude = position.longitude;
+      hasLocation = true;
+    } catch (_) {
+      hasLocation = false;
+    }
+
     final capturedAt = DateTime.now();
     final watermarkedPath = await _applyWatermark(
       sourcePath: pickedFile.path,
-      latitude: position.latitude,
-      longitude: position.longitude,
+      latitude: latitude,
+      longitude: longitude,
+      hasLocation: hasLocation,
       capturedAt: capturedAt,
       installerName: installerName,
       completeAddress: completeAddress,
@@ -46,8 +58,8 @@ class ImageCaptureService {
 
     return CapturedImageData(
       filePath: watermarkedPath,
-      latitude: position.latitude,
-      longitude: position.longitude,
+      latitude: latitude,
+      longitude: longitude,
       capturedAt: capturedAt,
     );
   }
@@ -56,110 +68,40 @@ class ImageCaptureService {
     required String sourcePath,
     required double latitude,
     required double longitude,
+    required bool hasLocation,
     required DateTime capturedAt,
     String? installerName,
     String? completeAddress,
   }) async {
     try {
-      final sourceFile = File(sourcePath);
-      final bytes = await sourceFile.readAsBytes();
-      var decoded = img.decodeImage(bytes);
-      if (decoded == null) return sourcePath;
-
-      if (decoded.width > _maxDimension || decoded.height > _maxDimension) {
-        decoded = img.copyResize(
-          decoded,
-          width: decoded.width >= decoded.height ? _maxDimension : null,
-          height: decoded.height > decoded.width ? _maxDimension : null,
-        );
-      }
+      final sourceBytes = await File(sourcePath).readAsBytes();
+      final outputPath = _buildWatermarkPath(sourcePath);
 
       final formatter = DateFormat('yyyy-MM-dd HH:mm:ss');
-      final safeInstaller = (installerName ?? '').trim().isEmpty
-          ? '-'
-          : (installerName ?? '').trim();
-      final safeAddress = (completeAddress ?? '').trim().isEmpty
-          ? '-'
-          : (completeAddress ?? '').trim();
-      final lines = [
-        'Installer: $safeInstaller',
-        'Address: $safeAddress',
-        'Lat: ${latitude.toStringAsFixed(6)}',
-        'Lng: ${longitude.toStringAsFixed(6)}',
-        'Time: ${formatter.format(capturedAt.toLocal())}',
-      ];
-
-      const padding = 16;
-      const lineHeight = 16;
-      final blockHeight = (lines.length * lineHeight) + 14;
-      final startY = (decoded.height - blockHeight - padding).clamp(0, decoded.height - 1);
-
-      await _drawLogo(decoded, padding);
-
-      img.fillRect(
-        decoded,
-        x1: padding,
-        y1: startY,
-        x2: decoded.width - padding,
-        y2: decoded.height - padding,
-        color: img.ColorRgba8(0, 0, 0, 170),
+      final encoded = await Isolate.run(
+        () => _applyWatermarkInBackground(
+          _WatermarkRequest(
+            sourceBytes: sourceBytes,
+            outputPath: outputPath,
+            latitude: latitude,
+            longitude: longitude,
+            hasLocation: hasLocation,
+            capturedAtIso: formatter.format(capturedAt.toLocal()),
+            installerName: installerName,
+            completeAddress: completeAddress,
+            maxDimension: _maxDimension,
+          ),
+        ),
       );
 
-      for (var index = 0; index < lines.length; index++) {
-        final line = lines[index];
-        final y = startY + 8 + (index * lineHeight);
-        img.drawString(
-          decoded,
-          line,
-          font: img.arial14,
-          x: padding + 10,
-          y: y,
-          color: img.ColorRgb8(255, 255, 255),
-          wrap: true,
-        );
+      if (encoded == null) {
+        return sourcePath;
       }
 
-      final outputPath = _buildWatermarkPath(sourcePath);
-      final outputFile = File(outputPath);
-      final encoded = _encodeByPath(outputPath, decoded);
-      await outputFile.writeAsBytes(encoded, flush: true);
+      await File(outputPath).writeAsBytes(encoded, flush: true);
       return outputPath;
     } catch (_) {
       return sourcePath;
-    }
-  }
-
-  Future<void> _drawLogo(img.Image target, int padding) async {
-    final logo = await _loadLogo();
-    if (logo == null) return;
-
-    final maxLogoWidth = (target.width * 0.22).round().clamp(80, 260);
-    final aspect = logo.height == 0 ? 1 : logo.width / logo.height;
-    final logoWidth = maxLogoWidth;
-    final logoHeight = (logoWidth / aspect).round().clamp(36, 120);
-
-    img.compositeImage(
-      target,
-      logo,
-      dstX: padding,
-      dstY: padding,
-      dstW: logoWidth,
-      dstH: logoHeight,
-    );
-  }
-
-  Future<img.Image?> _loadLogo() async {
-    if (_cachedLogo != null) return _cachedLogo;
-
-    try {
-      final bytes = await rootBundle.load(_logoAssetPath);
-      final logo = img.decodeImage(bytes.buffer.asUint8List());
-      if (logo != null) {
-        _cachedLogo = logo;
-      }
-      return logo;
-    } catch (_) {
-      return null;
     }
   }
 
@@ -177,12 +119,97 @@ class ImageCaptureService {
 
     return '${sourcePath}_wm.jpg';
   }
+}
 
-  List<int> _encodeByPath(String path, img.Image image) {
-    final lower = path.toLowerCase();
-    if (lower.endsWith('.png')) {
-      return img.encodePng(image);
-    }
-    return img.encodeJpg(image, quality: 60);
+class _WatermarkRequest {
+  const _WatermarkRequest({
+    required this.sourceBytes,
+    required this.outputPath,
+    required this.latitude,
+    required this.longitude,
+    required this.hasLocation,
+    required this.capturedAtIso,
+    required this.installerName,
+    required this.completeAddress,
+    required this.maxDimension,
+  });
+
+  final Uint8List sourceBytes;
+  final String outputPath;
+  final double latitude;
+  final double longitude;
+  final bool hasLocation;
+  final String capturedAtIso;
+  final String? installerName;
+  final String? completeAddress;
+  final int maxDimension;
+}
+
+List<int>? _applyWatermarkInBackground(_WatermarkRequest request) {
+  var decoded = img.decodeImage(request.sourceBytes);
+  if (decoded == null) return null;
+
+  if (decoded.width > request.maxDimension ||
+      decoded.height > request.maxDimension) {
+    decoded = img.copyResize(
+      decoded,
+      width: decoded.width >= decoded.height ? request.maxDimension : null,
+      height: decoded.height > decoded.width ? request.maxDimension : null,
+    );
   }
+
+  final safeInstaller = (request.installerName ?? '').trim().isEmpty
+      ? '-'
+      : (request.installerName ?? '').trim();
+  final safeAddress = (request.completeAddress ?? '').trim().isEmpty
+      ? '-'
+      : (request.completeAddress ?? '').trim();
+  final latitudeText = request.hasLocation
+      ? request.latitude.toStringAsFixed(6)
+      : 'GPS unavailable';
+  final longitudeText = request.hasLocation
+      ? request.longitude.toStringAsFixed(6)
+      : 'GPS unavailable';
+  final lines = [
+    'Installer: $safeInstaller',
+    'Address: $safeAddress',
+    'Lat: $latitudeText',
+    'Lng: $longitudeText',
+    'Time: ${request.capturedAtIso}',
+  ];
+
+  const padding = 16;
+  const lineHeight = 16;
+  final blockHeight = (lines.length * lineHeight) + 14;
+  final startY =
+      (decoded.height - blockHeight - padding).clamp(0, decoded.height - 1);
+
+  img.fillRect(
+    decoded,
+    x1: padding,
+    y1: startY,
+    x2: decoded.width - padding,
+    y2: decoded.height - padding,
+    color: img.ColorRgba8(0, 0, 0, 170),
+  );
+
+  for (var index = 0; index < lines.length; index++) {
+    final line = lines[index];
+    final y = startY + 8 + (index * lineHeight);
+    img.drawString(
+      decoded,
+      line,
+      font: img.arial14,
+      x: padding + 10,
+      y: y,
+      color: img.ColorRgb8(255, 255, 255),
+      wrap: true,
+    );
+  }
+
+  final lower = request.outputPath.toLowerCase();
+  if (lower.endsWith('.png')) {
+    return img.encodePng(decoded);
+  }
+  return img.encodeJpg(decoded, quality: 60);
 }
