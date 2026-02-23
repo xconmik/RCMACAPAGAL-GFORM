@@ -11,6 +11,25 @@ const CONFIG = {
   SHEET_NAME: 'Installations',
 };
 
+const SHEET_HEADERS_V2 = [
+  'timestamp',
+  'branch',
+  'outletCode',
+  'fullName',
+  'signageName',
+  'storeOwnerName',
+  'purok',
+  'barangay',
+  'municipality',
+  'brands',
+  'signageQuantity',
+  'awningQuantity',
+  'flangeQuantity',
+  'beforeImageDriveUrl',
+  'afterImageDriveUrl',
+  'completionImageDriveUrl',
+];
+
 function doPost(e) {
   try {
     const action = (e.parameter && e.parameter.action ? e.parameter.action : '').trim();
@@ -138,8 +157,7 @@ function _handleSubmitForm(e) {
   const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
   const sheet = _getOrCreateSheet(spreadsheet, CONFIG.SHEET_NAME);
 
-  _ensureHeader(sheet);
-  _removeSubmittedAtColumnIfPresent(sheet);
+  _ensureSheetStructureV2(sheet);
 
   const row = [
     _nowTimestamp(),
@@ -148,7 +166,9 @@ function _handleSubmitForm(e) {
     _string(payload.fullName),
     _string(payload.signageName),
     _string(payload.storeOwnerName),
-    _string(payload.completeAddress),
+    _string(payload.purok),
+    _string(payload.barangay),
+    _string(payload.municipality),
     _joinArray(payload.brands),
     _string(payload.signageQuantity),
     _string(payload.awningQuantity),
@@ -247,6 +267,7 @@ function _buildBranchSummary(branchName, spreadsheetId, sheet, limit) {
 function _mapSheetRowToSubmission(branchName, spreadsheetId, row, rowNumber) {
   const scriptTimestamp = _normalizeTimestamp(row[0]);
   const isLegacyRow = row.length >= 21;
+  const isSplitLocationRow = !isLegacyRow && row.length >= 16;
   const rawPayload = isLegacyRow ? _parseRawPayload(row[20]) : {};
 
   const fullName = isLegacyRow
@@ -260,25 +281,35 @@ function _mapSheetRowToSubmission(branchName, spreadsheetId, row, rowNumber) {
     : _string(row[5]);
   const brands = isLegacyRow
     ? _string(row[6])
-    : _string(row[7]);
+    : (isSplitLocationRow ? _string(row[9]) : _string(row[7]));
   const signageQuantity = isLegacyRow
     ? _string(row[7])
-    : _string(row[8]);
+    : (isSplitLocationRow ? _string(row[10]) : _string(row[8]));
   const awningQuantity = isLegacyRow
     ? _string(row[8])
-    : _string(row[9]);
+    : (isSplitLocationRow ? _string(row[11]) : _string(row[9]));
   const flangeQuantity = isLegacyRow
     ? _string(row[9])
-    : _string(row[10]);
+    : (isSplitLocationRow ? _string(row[12]) : _string(row[10]));
   const beforeImageDriveUrl = isLegacyRow
     ? _string(row[10])
-    : _string(row[11]);
+    : (isSplitLocationRow ? _string(row[13]) : _string(row[11]));
   const afterImageDriveUrl = isLegacyRow
     ? _string(row[11])
-    : _string(row[12]);
+    : (isSplitLocationRow ? _string(row[14]) : _string(row[12]));
   const completionImageDriveUrl = isLegacyRow
     ? _string(row[12])
-    : _string(row[13]);
+    : (isSplitLocationRow ? _string(row[15]) : _string(row[13]));
+
+  const purok = isLegacyRow
+    ? _string(rawPayload.purok)
+    : (isSplitLocationRow ? _string(row[6]) : _extractPurok(_string(row[6])));
+  const barangay = isLegacyRow
+    ? _string(rawPayload.barangay)
+    : (isSplitLocationRow ? _string(row[7]) : _extractBarangay(_string(row[6])));
+  const municipality = isLegacyRow
+    ? _string(rawPayload.municipality)
+    : (isSplitLocationRow ? _string(row[8]) : _extractMunicipality(_string(row[6])));
   return {
     rowNumber: rowNumber,
     spreadsheetId: spreadsheetId,
@@ -288,6 +319,9 @@ function _mapSheetRowToSubmission(branchName, spreadsheetId, row, rowNumber) {
     branch: branchName,
     fullName: fullName,
     outletCode: _string(row[2]),
+    purok: purok,
+    barangay: barangay,
+    municipality: municipality,
     brands: brands,
     signageName: signageName,
     storeOwnerName: storeOwnerName,
@@ -298,6 +332,116 @@ function _mapSheetRowToSubmission(branchName, spreadsheetId, row, rowNumber) {
     afterImageDriveUrl: afterImageDriveUrl,
     completionImageDriveUrl: completionImageDriveUrl,
   };
+}
+
+function _ensureSheetStructureV2(sheet) {
+  if (sheet.getLastRow() <= 0) {
+    sheet.appendRow(SHEET_HEADERS_V2);
+    return;
+  }
+
+  _removeSubmittedAtColumnIfPresent(sheet);
+
+  const lastColumn = Math.max(sheet.getLastColumn(), 1);
+  const headerRow = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
+  const normalizedHeaders = headerRow.map((item) => _normalizeHeader(item));
+
+  const hasSplitLocation =
+    normalizedHeaders.indexOf('purok') >= 0 &&
+    normalizedHeaders.indexOf('barangay') >= 0 &&
+    normalizedHeaders.indexOf('municipality') >= 0;
+
+  if (hasSplitLocation) {
+    _ensureColumnCount(sheet, SHEET_HEADERS_V2.length);
+    sheet.getRange(1, 1, 1, SHEET_HEADERS_V2.length).setValues([SHEET_HEADERS_V2]);
+    return;
+  }
+
+  const dataRowCount = Math.max(sheet.getLastRow() - 1, 0);
+  const values = dataRowCount > 0
+    ? sheet.getRange(2, 1, dataRowCount, lastColumn).getValues()
+    : [];
+
+  const migrated = values.map((row) => {
+    const completeAddress = _valueByHeader(row, normalizedHeaders, 'completeaddress');
+    const purok = _extractPurok(completeAddress);
+    const barangay = _extractBarangay(completeAddress);
+    const municipality = _extractMunicipality(completeAddress);
+
+    return [
+      _valueByHeader(row, normalizedHeaders, 'timestamp'),
+      _valueByHeader(row, normalizedHeaders, 'branch'),
+      _valueByHeader(row, normalizedHeaders, 'outletcode'),
+      _valueByHeader(row, normalizedHeaders, 'fullname'),
+      _valueByHeader(row, normalizedHeaders, 'signagename'),
+      _valueByHeader(row, normalizedHeaders, 'storeownername'),
+      purok,
+      barangay,
+      municipality,
+      _valueByHeader(row, normalizedHeaders, 'brands'),
+      _valueByHeader(row, normalizedHeaders, 'signagequantity'),
+      _valueByHeader(row, normalizedHeaders, 'awningquantity'),
+      _valueByHeader(row, normalizedHeaders, 'flangequantity'),
+      _valueByHeader(row, normalizedHeaders, 'beforeimagedriveurl'),
+      _valueByHeader(row, normalizedHeaders, 'afterimagedriveurl'),
+      _valueByHeader(row, normalizedHeaders, 'completionimagedriveurl'),
+    ];
+  });
+
+  _ensureColumnCount(sheet, SHEET_HEADERS_V2.length);
+  sheet.getRange(1, 1, 1, SHEET_HEADERS_V2.length).setValues([SHEET_HEADERS_V2]);
+
+  if (migrated.length > 0) {
+    sheet.getRange(2, 1, migrated.length, SHEET_HEADERS_V2.length).setValues(migrated);
+  }
+}
+
+function _ensureColumnCount(sheet, requiredColumns) {
+  const current = sheet.getMaxColumns();
+  if (current < requiredColumns) {
+    sheet.insertColumnsAfter(current, requiredColumns - current);
+  }
+}
+
+function _normalizeHeader(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function _valueByHeader(row, normalizedHeaders, headerName) {
+  const index = normalizedHeaders.indexOf(headerName);
+  if (index < 0 || index >= row.length) return '';
+  return row[index];
+}
+
+function _extractPurok(completeAddress) {
+  const parts = _splitAddressParts(completeAddress);
+  return parts.length > 0 ? parts[0] : '';
+}
+
+function _extractBarangay(completeAddress) {
+  const parts = _splitAddressParts(completeAddress);
+  return parts.length > 1 ? parts[1] : '';
+}
+
+function _extractMunicipality(completeAddress) {
+  const parts = _splitAddressParts(completeAddress);
+  if (parts.length <= 2) return '';
+  return parts.slice(2).join(', ');
+}
+
+function _splitAddressParts(completeAddress) {
+  const text = _string(completeAddress);
+  if (!text) return [];
+
+  const parts = text
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item);
+
+  if (parts.length === 0) return [];
+
+  parts[0] = parts[0].replace(/^purok\s*/i, '').trim();
+  return parts;
 }
 
 function _parseRawPayload(value) {
@@ -323,22 +467,7 @@ function _resolveSpreadsheetIdForBranch(branchName) {
 function _ensureHeader(sheet) {
   if (sheet.getLastRow() > 0) return;
 
-  sheet.appendRow([
-    'timestamp',
-    'branch',
-    'outletCode',
-    'fullName',
-    'signageName',
-    'storeOwnerName',
-    'completeAddress',
-    'brands',
-    'signageQuantity',
-    'awningQuantity',
-    'flangeQuantity',
-    'beforeImageDriveUrl',
-    'afterImageDriveUrl',
-    'completionImageDriveUrl',
-  ]);
+  sheet.appendRow(SHEET_HEADERS_V2);
 }
 
 function _removeSubmittedAtColumnIfPresent(sheet) {
