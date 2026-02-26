@@ -9,6 +9,14 @@ const CONFIG = {
     'DSO Bantay': '1eHMaGqKQ66a_zj2KjzsdsN6sjsU0f4g5HvZn4X93vtw',
   },
   SHEET_NAME: 'Installations',
+  INSTALLER_ACCOUNTS_SHEET: {
+    spreadsheetId: '1QNfQGhCakqpy7oZ815S0Y0AEClhorGYwclkA4jZfrlc',
+    sheetName: 'InstallerAccounts',
+  },
+  INSTALLER_PROFILES: [
+    { installerId: 'installer01', pin: '1234', installerName: 'Installer 01', branch: 'Bulacan', role: 'installer', active: true },
+    { installerId: 'installer02', pin: '1234', installerName: 'Installer 02', branch: 'DSO Talavera', role: 'installer', active: true },
+  ],
 };
 
 const SHEET_HEADERS_V2 = [
@@ -35,6 +43,7 @@ const INSTALLER_TRACKING_HEADERS = [
   'TRACKED_AT',
   'BRANCH',
   'INSTALLER_NAME',
+  'INSTALLER_ID',
   'LATITUDE',
   'LONGITUDE',
   'ACCURACY_METERS',
@@ -44,6 +53,15 @@ const INSTALLER_TRACKING_HEADERS = [
   'SESSION_ID',
   'IS_MOCKED',
   'SOURCE',
+];
+
+const INSTALLER_ACCOUNTS_HEADERS = [
+  'installerId',
+  'pin',
+  'installerName',
+  'branch',
+  'role',
+  'active',
 ];
 
 function doPost(e) {
@@ -68,16 +86,141 @@ function doPost(e) {
       return _handleTrackInstallerLocation(e);
     }
 
+    if (action === 'installerLogin') {
+      return _handleInstallerLogin(e);
+    }
+
     if (action === 'deleteEntry') {
       return _handleDeleteEntry(e);
     }
 
     return _jsonResponse({
       success: false,
-      error: 'Unknown action. Use uploadImage, submitForm, trackInstallerLocation, or deleteEntry.',
+      error: 'Unknown action. Use uploadImage, submitForm, installerLogin, trackInstallerLocation, or deleteEntry.',
     }, 400);
   } catch (error) {
     return _jsonResponse({ success: false, error: String(error) }, 500);
+  }
+}
+
+function _handleInstallerLogin(e) {
+  const payload = _parseJsonBody(e);
+  const installerId = _string(payload.installerId).trim();
+  const pin = _string(payload.pin).trim();
+
+  if (!installerId || !pin) {
+    throw new Error('Missing required fields: installerId, pin');
+  }
+
+  const profiles = _loadInstallerProfiles();
+  const profile = profiles.find((item) =>
+    _string(item.installerId).trim() === installerId &&
+    _string(item.pin).trim() === pin &&
+    item.active !== false
+  );
+
+  if (!profile) {
+    return _jsonResponse({
+      success: false,
+      error: 'Invalid installer credentials.',
+      scriptTimestamp: _nowTimestamp(),
+    }, 401);
+  }
+
+  return _jsonResponse({
+    success: true,
+    installerId: _string(profile.installerId),
+    installerName: _string(profile.installerName),
+    branch: _string(profile.branch),
+    role: _string(profile.role || 'installer'),
+    scriptTimestamp: _nowTimestamp(),
+  }, 200);
+}
+
+function _loadInstallerProfiles() {
+  const fromSheet = _loadInstallerProfilesFromSheet();
+  if (fromSheet.length > 0) {
+    return fromSheet;
+  }
+
+  return (CONFIG.INSTALLER_PROFILES || []).map((item) => ({
+    installerId: _string(item.installerId).trim(),
+    pin: _string(item.pin).trim(),
+    installerName: _string(item.installerName).trim(),
+    branch: _string(item.branch).trim(),
+    role: _string(item.role || 'installer').trim(),
+    active: item.active !== false,
+  }));
+}
+
+function _loadInstallerProfilesFromSheet() {
+  try {
+    const cfg = CONFIG.INSTALLER_ACCOUNTS_SHEET || {};
+    const configuredId = _string(cfg.spreadsheetId).trim();
+    const sheetName = _string(cfg.sheetName).trim() || 'InstallerAccounts';
+
+    let spreadsheetId = configuredId;
+    if (!spreadsheetId) {
+      const branchIds = Object.keys(CONFIG.BRANCH_SHEET_IDS || {})
+        .map((name) => _string(CONFIG.BRANCH_SHEET_IDS[name]).trim())
+        .filter((id) => id);
+      if (branchIds.length > 0) {
+        spreadsheetId = branchIds[0];
+      }
+    }
+
+    if (!spreadsheetId) return [];
+
+    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+    const sheet = spreadsheet.getSheetByName(sheetName);
+    if (!sheet) return [];
+
+    const lastRow = sheet.getLastRow();
+    const lastColumn = sheet.getLastColumn();
+    if (lastRow < 2 || lastColumn < 1) return [];
+
+    const headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
+    const normalized = headers.map((item) => _normalizeHeader(item));
+
+    const installerIdIndex = normalized.indexOf('installerid');
+    const pinIndex = normalized.indexOf('pin');
+    const installerNameIndex = normalized.indexOf('installername');
+    const branchIndex = normalized.indexOf('branch');
+    const roleIndex = normalized.indexOf('role');
+    const activeIndex = normalized.indexOf('active');
+
+    if (installerIdIndex < 0 || pinIndex < 0 || installerNameIndex < 0 || branchIndex < 0) {
+      return [];
+    }
+
+    const values = sheet.getRange(2, 1, lastRow - 1, lastColumn).getValues();
+
+    return values
+      .map((row) => {
+        const installerId = _string(row[installerIdIndex]).trim();
+        const pin = _string(row[pinIndex]).trim();
+        const installerName = _string(row[installerNameIndex]).trim();
+        const branch = _string(row[branchIndex]).trim();
+        const role = roleIndex >= 0 ? _string(row[roleIndex]).trim() || 'installer' : 'installer';
+
+        let active = true;
+        if (activeIndex >= 0) {
+          const activeText = _string(row[activeIndex]).trim().toLowerCase();
+          active = activeText !== 'false' && activeText !== '0' && activeText !== 'no' && activeText !== 'inactive';
+        }
+
+        return {
+          installerId: installerId,
+          pin: pin,
+          installerName: installerName,
+          branch: branch,
+          role: role,
+          active: active,
+        };
+      })
+      .filter((item) => item.installerId && item.pin && item.installerName && item.branch);
+  } catch (error) {
+    return [];
   }
 }
 
@@ -116,6 +259,7 @@ function _handleTrackInstallerLocation(e) {
     trackedAt,
     branchName,
     installerName,
+    _string(payload.installerId),
     latitude,
     longitude,
     _toFloat(payload.accuracy, ''),
@@ -179,13 +323,78 @@ function doGet(e) {
       return _handleAdminData(e);
     }
 
+    if (action === 'installerAccountsTemplate') {
+      return _handleInstallerAccountsTemplate(e);
+    }
+
     return _jsonResponse({
       success: false,
-      error: 'Unknown action. Use action=adminData.',
+      error: 'Unknown action. Use action=adminData or installerAccountsTemplate.',
     }, 400);
   } catch (error) {
     return _jsonResponse({ success: false, error: String(error) }, 500);
   }
+}
+
+function _handleInstallerAccountsTemplate(e) {
+  const cfg = CONFIG.INSTALLER_ACCOUNTS_SHEET || {};
+  const configuredId = _string(cfg.spreadsheetId).trim();
+  const querySpreadsheetId = _string(e && e.parameter && e.parameter.spreadsheetId).trim();
+  const spreadsheetId = querySpreadsheetId || configuredId;
+  const sheetName = _string(cfg.sheetName).trim() || 'InstallerAccounts';
+
+  if (!spreadsheetId) {
+    throw new Error('Installer accounts spreadsheet ID is missing. Set CONFIG.INSTALLER_ACCOUNTS_SHEET.spreadsheetId or pass ?spreadsheetId=.');
+  }
+
+  const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+  const sheet = _getOrCreateSheet(spreadsheet, sheetName);
+
+  _ensureColumnCount(sheet, INSTALLER_ACCOUNTS_HEADERS.length);
+  sheet
+    .getRange(1, 1, 1, INSTALLER_ACCOUNTS_HEADERS.length)
+    .setValues([INSTALLER_ACCOUNTS_HEADERS]);
+
+  const lastRow = sheet.getLastRow();
+  let seeded = false;
+  let seededInstallerId = '';
+
+  if (lastRow <= 1) {
+    const firstInstallerName =
+      _string(e && e.parameter && e.parameter.installerName).trim() ||
+      'Antonio Garcia';
+    const installerId =
+      _string(e && e.parameter && e.parameter.installerId).trim() ||
+      _installerIdFromName(firstInstallerName);
+    const pin = _string(e && e.parameter && e.parameter.pin).trim() || '1234';
+    const defaultBranch =
+      _string(e && e.parameter && e.parameter.branch).trim() ||
+      _firstConfiguredBranch();
+
+    sheet.appendRow([
+      installerId,
+      pin,
+      firstInstallerName,
+      defaultBranch,
+      'installer',
+      'true',
+    ]);
+
+    seeded = true;
+    seededInstallerId = installerId;
+  }
+
+  return _jsonResponse({
+    success: true,
+    message: seeded
+      ? 'InstallerAccounts sheet created and first installer seeded.'
+      : 'InstallerAccounts sheet is ready.',
+    spreadsheetId: spreadsheetId,
+    sheetName: sheetName,
+    seeded: seeded,
+    seededInstallerId: seededInstallerId,
+    scriptTimestamp: _nowTimestamp(),
+  }, 200);
 }
 
 function _handleUploadImage(e) {
@@ -344,15 +553,23 @@ function _buildBranchTrackingRows(branchName, spreadsheetId, limit) {
   const values = sheet.getRange(startRow, 1, count, columnCount).getValues();
 
   return values
-    .map((row) => ({
-      branch: _string(row[2]) || branchName,
-      installerName: _string(row[3]),
-      latitude: _toFloat(row[4], 0),
-      longitude: _toFloat(row[5], 0),
-      trackedAt: _normalizeTimestamp(row[1]),
-      scriptTimestamp: _normalizeTimestamp(row[0]),
-      sessionId: _string(row[10]),
-    }))
+    .map((row) => {
+      const hasInstallerIdColumn = row.length >= 14;
+      const latIndex = hasInstallerIdColumn ? 5 : 4;
+      const lngIndex = hasInstallerIdColumn ? 6 : 5;
+      const sessionIndex = hasInstallerIdColumn ? 11 : 10;
+
+      return {
+        branch: _string(row[2]) || branchName,
+        installerName: _string(row[3]),
+        installerId: hasInstallerIdColumn ? _string(row[4]) : '',
+        latitude: _toFloat(row[latIndex], 0),
+        longitude: _toFloat(row[lngIndex], 0),
+        trackedAt: _normalizeTimestamp(row[1]),
+        scriptTimestamp: _normalizeTimestamp(row[0]),
+        sessionId: _string(row[sessionIndex]),
+      };
+    })
     .filter((row) => row.installerName && !isNaN(row.latitude) && !isNaN(row.longitude));
 }
 
@@ -825,4 +1042,23 @@ function _extractDriveFileId(url) {
   }
 
   return '';
+}
+
+function _installerIdFromName(name) {
+  const normalized = _string(name)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '.');
+
+  const collapsed = normalized
+    .replace(/\.+/g, '.')
+    .replace(/^\./, '')
+    .replace(/\.$/, '');
+
+  return collapsed || 'installer01';
+}
+
+function _firstConfiguredBranch() {
+  const branches = Object.keys(CONFIG.BRANCH_SHEET_IDS || {});
+  return branches.length > 0 ? branches[0] : '';
 }

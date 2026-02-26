@@ -20,6 +20,8 @@
   - `BRANCH_SHEET_IDS['DSO Villasis']`
   - `BRANCH_SHEET_IDS['DSO Bantay']`
   - `SHEET_NAME` (optional)
+  - `INSTALLER_ACCOUNTS_SHEET` (optional spreadsheet ID override for installer accounts)
+  - `INSTALLER_PROFILES` fallback (used only if sheet is missing/empty)
 
 Example mapping:
 
@@ -47,6 +49,7 @@ Use the same base URL with different `action` query params:
 - Submit endpoint: `<WEB_APP_URL>?action=submitForm`
 - Admin endpoint: `<WEB_APP_URL>?action=adminData`
 - Installer GPS tracking endpoint: `<WEB_APP_URL>?action=trackInstallerLocation`
+- Installer login endpoint: `<WEB_APP_URL>?action=installerLogin`
 
 Run command:
 
@@ -56,7 +59,8 @@ flutter run \
   --dart-define=GDRIVE_UPLOAD_URL=<WEB_APP_URL>?action=uploadImage \
   --dart-define=GSHEETS_SUBMIT_URL=<WEB_APP_URL>?action=submitForm \
   --dart-define=ADMIN_DATA_URL=<WEB_APP_URL>?action=adminData \
-  --dart-define=INSTALLER_TRACK_URL=<WEB_APP_URL>?action=trackInstallerLocation
+  --dart-define=INSTALLER_TRACK_URL=<WEB_APP_URL>?action=trackInstallerLocation \
+  --dart-define=INSTALLER_LOGIN_URL=<WEB_APP_URL>?action=installerLogin
 ```
 
 ## 5) Expected Request Shapes
@@ -106,6 +110,35 @@ Optional fields:
 
 Storage destination:
 - The script appends rows to an `InstallerTracking` sheet inside the spreadsheet mapped to the provided `branch`.
+
+### Installer login
+
+JSON body fields:
+- `installerId`
+- `pin`
+
+The script validates credentials from a sheet tab named `InstallerAccounts`.
+
+Required `InstallerAccounts` header row columns:
+- `installerId`
+- `pin`
+- `installerName`
+- `branch`
+
+Optional columns:
+- `role`
+- `active`
+
+If `INSTALLER_ACCOUNTS_SHEET.spreadsheetId` is empty, the script reads `InstallerAccounts` from the first configured branch spreadsheet. If the sheet is missing/empty, it falls back to `CONFIG.INSTALLER_PROFILES`.
+
+Quick setup helper:
+- Open this URL once after deployment to auto-create headers (and seed first installer if empty):
+  - `<WEB_APP_URL>?action=installerAccountsTemplate`
+- Optional query params:
+  - `installerName=Antonio Garcia`
+  - `installerId=antonio.garcia`
+  - `pin=1234`
+  - `branch=Bulacan`
 
 ## Notes
 
