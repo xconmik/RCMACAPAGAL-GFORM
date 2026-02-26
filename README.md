@@ -11,6 +11,7 @@ The app reads endpoint URLs from `--dart-define` values:
 - `GDRIVE_UPLOAD_MODE`: use `multipart` (default) or `apps_script`.
 - `ADMIN_DATA_URL` (optional): endpoint for admin dashboard data; if empty, app derives it from `GSHEETS_SUBMIT_URL` using `action=adminData`.
 - `INSTALLER_TRACK_URL` (optional): endpoint for live installer GPS tracking; if empty, app derives it from `GSHEETS_SUBMIT_URL` using `action=trackInstallerLocation`.
+- `INSTALLER_LOGIN_URL` (optional): endpoint for installer login/profile; if empty, app derives it from `GSHEETS_SUBMIT_URL` using `action=installerLogin`.
 
 If either value is empty, the app uses built-in mock behavior for that part.
 
@@ -24,7 +25,8 @@ flutter run \
 	--dart-define=GDRIVE_UPLOAD_URL=https://script.google.com/macros/s/AKfycbxKq50oJiSVKWOudPh1Do9leh0_MetObyu4s5xqK5sVRfmD-EvuraVbKVog0WMdY6trUg/exec?action=uploadImage \
 	--dart-define=GSHEETS_SUBMIT_URL=https://script.google.com/macros/s/AKfycbxKq50oJiSVKWOudPh1Do9leh0_MetObyu4s5xqK5sVRfmD-EvuraVbKVog0WMdY6trUg/exec?action=submitForm \
 	--dart-define=ADMIN_DATA_URL=https://script.google.com/macros/s/AKfycbxKq50oJiSVKWOudPh1Do9leh0_MetObyu4s5xqK5sVRfmD-EvuraVbKVog0WMdY6trUg/exec?action=adminData \
-	--dart-define=INSTALLER_TRACK_URL=https://script.google.com/macros/s/AKfycbxKq50oJiSVKWOudPh1Do9leh0_MetObyu4s5xqK5sVRfmD-EvuraVbKVog0WMdY6trUg/exec?action=trackInstallerLocation
+	--dart-define=INSTALLER_TRACK_URL=https://script.google.com/macros/s/AKfycbxKq50oJiSVKWOudPh1Do9leh0_MetObyu4s5xqK5sVRfmD-EvuraVbKVog0WMdY6trUg/exec?action=trackInstallerLocation \
+	--dart-define=INSTALLER_LOGIN_URL=https://script.google.com/macros/s/AKfycbxKq50oJiSVKWOudPh1Do9leh0_MetObyu4s5xqK5sVRfmD-EvuraVbKVog0WMdY6trUg/exec?action=installerLogin
 ```
 
 ## Deploy Admin Panel on Vercel (Live)
@@ -42,6 +44,7 @@ Steps:
 	- `GSHEETS_SUBMIT_URL=<WEB_APP_URL>?action=submitForm`
 	- `ADMIN_DATA_URL=<WEB_APP_URL>?action=adminData`
 	- `INSTALLER_TRACK_URL=<WEB_APP_URL>?action=trackInstallerLocation`
+	- `INSTALLER_LOGIN_URL=<WEB_APP_URL>?action=installerLogin`
 4. Deploy.
 
 Notes:

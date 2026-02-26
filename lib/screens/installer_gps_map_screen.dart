@@ -151,6 +151,7 @@ class _InstallerGpsMapScreenState extends State<InstallerGpsMapScreen> {
 
     try {
       await _trackingService.submitTrackingPoint(
+        installerId: '',
         installerName: installerName,
         branch: branch,
         latitude: position.latitude,

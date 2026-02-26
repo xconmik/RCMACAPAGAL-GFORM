@@ -17,6 +17,11 @@ class ApiEndpoints {
     defaultValue: '',
   );
 
+  static const String _installerLoginUrlEnv = String.fromEnvironment(
+    'INSTALLER_LOGIN_URL',
+    defaultValue: '',
+  );
+
   static const String googleDriveUploadMode = String.fromEnvironment(
     'GDRIVE_UPLOAD_MODE',
     defaultValue: 'apps_script',
@@ -57,6 +62,20 @@ class ApiEndpoints {
 
   static bool get hasInstallerTrackingEndpoint =>
       installerTrackingUrl.trim().isNotEmpty;
+
+  static String get installerLoginUrl {
+    final override = _installerLoginUrlEnv.trim();
+    if (override.isNotEmpty) return _withAction(override, 'installerLogin');
+
+    final submitEnv = _googleSheetsSubmitUrlEnv.trim();
+    if (submitEnv.isNotEmpty) {
+      return _withAction(submitEnv, 'installerLogin');
+    }
+
+    return _withAction(_defaultWebAppUrl, 'installerLogin');
+  }
+
+  static bool get hasInstallerLoginEndpoint => installerLoginUrl.trim().isNotEmpty;
 
   static bool get useAppsScriptJsonMode =>
       googleDriveUploadMode.trim().toLowerCase() == 'apps_script';

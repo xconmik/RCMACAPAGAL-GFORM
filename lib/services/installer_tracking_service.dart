@@ -9,6 +9,7 @@ class InstallerTrackingService {
   static const Duration _requestTimeout = Duration(seconds: 30);
 
   Future<void> submitTrackingPoint({
+    required String installerId,
     required String installerName,
     required String branch,
     required double latitude,
@@ -26,6 +27,7 @@ class InstallerTrackingService {
     }
 
     final payload = <String, dynamic>{
+      'installerId': installerId,
       'installerName': installerName,
       'branch': branch,
       'latitude': latitude,
