@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:intl/intl.dart';
@@ -7,7 +9,7 @@ import '../models/admin_data.dart';
 import '../services/admin_service.dart';
 import '../services/allocation_service.dart';
 
-enum _AdminMenu { dashboard, entries, allocations, encoderArea }
+enum _AdminMenu { dashboard, installerMap, entries, allocations, encoderArea }
 
 enum _HistoryRange { last7Days, last30Days, all }
 
@@ -19,6 +21,8 @@ class AdminPanelScreen extends StatefulWidget {
 }
 
 class _AdminPanelScreenState extends State<AdminPanelScreen> {
+  static const Duration _autoRefreshInterval = Duration(seconds: 10);
+
   static const List<String> _branches = [
     'ALL',
     'Bulacan',
@@ -43,6 +47,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   final TextEditingController _allocationAllController =
       TextEditingController();
   final Map<String, TextEditingController> _allocationControllers = {};
+  Timer? _autoRefreshTimer;
 
   _AdminMenu _activeMenu = _AdminMenu.dashboard;
   _HistoryRange _historyRange = _HistoryRange.last30Days;
@@ -55,6 +60,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
   bool _isLoading = true;
   bool _isLoadingMore = false;
+  bool _isAutoRefreshing = false;
   bool _isAllocationEditLocked = false;
   String? _error;
   final Set<String> _deletingEntryKeys = <String>{};
@@ -75,11 +81,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   @override
   void initState() {
     super.initState();
+    _startAutoRefresh();
     _initialize();
   }
 
   @override
   void dispose() {
+    _autoRefreshTimer?.cancel();
     _searchController.dispose();
     _allocationAllController.dispose();
     for (final controller in _allocationControllers.values) {
@@ -91,6 +99,43 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   Future<void> _initialize() async {
     await _loadAllocations();
     await _loadData();
+  }
+
+  void _startAutoRefresh() {
+    _autoRefreshTimer?.cancel();
+    _autoRefreshTimer =
+        Timer.periodic(_autoRefreshInterval, (_) => _autoRefreshTick());
+  }
+
+  Future<void> _autoRefreshTick() async {
+    if (!mounted ||
+        (_activeMenu != _AdminMenu.dashboard &&
+            _activeMenu != _AdminMenu.installerMap) ||
+        _isLoading ||
+        _isLoadingMore ||
+        _isAutoRefreshing) {
+      return;
+    }
+
+    _isAutoRefreshing = true;
+    try {
+      final data = await _adminService.fetchDashboardData(
+        branch: _selectedBranch,
+        limit: _currentLimit,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _dashboard = data;
+        _lastRefreshedAt = DateTime.now();
+        _error = null;
+      });
+
+      await _ensureAllocationBranches(_extractBranchesFromData(data));
+    } catch (_) {
+    } finally {
+      _isAutoRefreshing = false;
+    }
   }
 
   Future<void> _loadAllocations() async {
@@ -330,6 +375,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 ),
               ),
               _menuTile('Dashboard', _AdminMenu.dashboard),
+              _menuTile('Installer Map', _AdminMenu.installerMap),
               _menuTile('Branch Entries', _AdminMenu.entries),
               _menuTile('Allocations', _AdminMenu.allocations),
               _menuTile('ENCODER AREA', _AdminMenu.encoderArea),
@@ -467,6 +513,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     switch (_activeMenu) {
       case _AdminMenu.dashboard:
         return _buildDashboardView(dashboard);
+      case _AdminMenu.installerMap:
+        return _buildInstallerMapView(dashboard);
       case _AdminMenu.entries:
         return _buildEntriesView(dashboard);
       case _AdminMenu.allocations:
@@ -539,6 +587,18 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 )
               : _buildSubmissionTable(historyFiltered),
         ),
+      ],
+    );
+  }
+
+  Widget _buildInstallerMapView(AdminDashboardData dashboard) {
+    final mapPoints = _latestTrackingPerInstaller(
+      dashboard.recentInstallerLocations,
+    );
+
+    return ListView(
+      children: [
+        _buildInstallerMapCard(mapPoints),
       ],
     );
   }
