@@ -89,6 +89,7 @@ class AdminDashboardData {
     required this.scriptTimestamp,
     required this.branches,
     required this.recentSubmissions,
+    required this.recentInstallerLocations,
   });
 
   final String selectedBranch;
@@ -96,10 +97,12 @@ class AdminDashboardData {
   final String scriptTimestamp;
   final List<BranchSummary> branches;
   final List<AdminSubmission> recentSubmissions;
+  final List<AdminTrackingLocation> recentInstallerLocations;
 
   factory AdminDashboardData.fromJson(Map<String, dynamic> json) {
     final branchesJson = (json['branches'] as List?) ?? [];
     final recentJson = (json['recentSubmissions'] as List?) ?? [];
+    final trackingJson = (json['recentInstallerLocations'] as List?) ?? [];
 
     return AdminDashboardData(
       selectedBranch: (json['selectedBranch'] ?? 'ALL').toString(),
@@ -114,6 +117,44 @@ class AdminDashboardData {
           .whereType<Map>()
           .map((item) => AdminSubmission.fromJson(item.cast<String, dynamic>()))
           .toList(),
+      recentInstallerLocations: trackingJson
+          .whereType<Map>()
+          .map(
+            (item) => AdminTrackingLocation.fromJson(item.cast<String, dynamic>()),
+          )
+          .toList(),
+    );
+  }
+}
+
+class AdminTrackingLocation {
+  const AdminTrackingLocation({
+    required this.branch,
+    required this.installerName,
+    required this.latitude,
+    required this.longitude,
+    required this.trackedAt,
+    required this.scriptTimestamp,
+    required this.sessionId,
+  });
+
+  final String branch;
+  final String installerName;
+  final double latitude;
+  final double longitude;
+  final String trackedAt;
+  final String scriptTimestamp;
+  final String sessionId;
+
+  factory AdminTrackingLocation.fromJson(Map<String, dynamic> json) {
+    return AdminTrackingLocation(
+      branch: (json['branch'] ?? '').toString(),
+      installerName: (json['installerName'] ?? '').toString(),
+      latitude: double.tryParse((json['latitude'] ?? '').toString()) ?? 0,
+      longitude: double.tryParse((json['longitude'] ?? '').toString()) ?? 0,
+      trackedAt: (json['trackedAt'] ?? '').toString(),
+      scriptTimestamp: (json['scriptTimestamp'] ?? '').toString(),
+      sessionId: (json['sessionId'] ?? '').toString(),
     );
   }
 }

@@ -12,6 +12,11 @@ class ApiEndpoints {
     defaultValue: '',
   );
 
+  static const String _installerTrackingUrlEnv = String.fromEnvironment(
+    'INSTALLER_TRACK_URL',
+    defaultValue: '',
+  );
+
   static const String googleDriveUploadMode = String.fromEnvironment(
     'GDRIVE_UPLOAD_MODE',
     defaultValue: 'apps_script',
@@ -37,6 +42,21 @@ class ApiEndpoints {
   static bool get hasDriveEndpoint => googleDriveUploadUrl.trim().isNotEmpty;
 
   static bool get hasSheetsEndpoint => googleSheetsSubmitUrl.trim().isNotEmpty;
+
+  static String get installerTrackingUrl {
+    final override = _installerTrackingUrlEnv.trim();
+    if (override.isNotEmpty) return _withAction(override, 'trackInstallerLocation');
+
+    final submitEnv = _googleSheetsSubmitUrlEnv.trim();
+    if (submitEnv.isNotEmpty) {
+      return _withAction(submitEnv, 'trackInstallerLocation');
+    }
+
+    return _withAction(_defaultWebAppUrl, 'trackInstallerLocation');
+  }
+
+  static bool get hasInstallerTrackingEndpoint =>
+      installerTrackingUrl.trim().isNotEmpty;
 
   static bool get useAppsScriptJsonMode =>
       googleDriveUploadMode.trim().toLowerCase() == 'apps_script';

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'installer_gps_map_screen.dart';
 import '../widgets/primary_action_button.dart';
 import 'multi_step_form_screen.dart';
 
@@ -102,6 +103,17 @@ class _HomeScreenState extends State<HomeScreen> {
                           Navigator.of(context).pushReplacement(
                             MaterialPageRoute<void>(
                               builder: (_) => const MultiStepFormScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      PrimaryActionButton(
+                        label: 'Installer GPS Map',
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const InstallerGpsMapScreen(),
                             ),
                           );
                         },

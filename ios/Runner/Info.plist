@@ -29,7 +29,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>This app needs camera access to capture installation photos.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>This app needs location access to attach GPS data to captured photos.</string>
+	<string>This app needs location access to show installer GPS position on map and attach GPS data to captured photos.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

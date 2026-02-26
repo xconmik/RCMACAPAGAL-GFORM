@@ -30,6 +30,22 @@ const SHEET_HEADERS_V2 = [
   'COMPLETION_FORM',
 ];
 
+const INSTALLER_TRACKING_HEADERS = [
+  'TIMESTAMP',
+  'TRACKED_AT',
+  'BRANCH',
+  'INSTALLER_NAME',
+  'LATITUDE',
+  'LONGITUDE',
+  'ACCURACY_METERS',
+  'SPEED_MPS',
+  'HEADING_DEG',
+  'ALTITUDE_METERS',
+  'SESSION_ID',
+  'IS_MOCKED',
+  'SOURCE',
+];
+
 function doPost(e) {
   try {
     const action = (e.parameter && e.parameter.action ? e.parameter.action : '').trim();
@@ -48,17 +64,79 @@ function doPost(e) {
       return _handleSubmitForm(e);
     }
 
+    if (action === 'trackInstallerLocation') {
+      return _handleTrackInstallerLocation(e);
+    }
+
     if (action === 'deleteEntry') {
       return _handleDeleteEntry(e);
     }
 
     return _jsonResponse({
       success: false,
-      error: 'Unknown action. Use uploadImage, submitForm, or deleteEntry.',
+      error: 'Unknown action. Use uploadImage, submitForm, trackInstallerLocation, or deleteEntry.',
     }, 400);
   } catch (error) {
     return _jsonResponse({ success: false, error: String(error) }, 500);
   }
+}
+
+function _handleTrackInstallerLocation(e) {
+  const payload = _parseJsonBody(e);
+  const installerName = _string(payload.installerName).trim();
+  const branchName = _string(payload.branch).trim();
+  const latitude = _toFloat(payload.latitude, NaN);
+  const longitude = _toFloat(payload.longitude, NaN);
+  const trackedAt = _toIsoString(payload.trackedAt);
+
+  if (!installerName) {
+    throw new Error('Missing required field: installerName');
+  }
+
+  if (!branchName) {
+    throw new Error('Missing required field: branch');
+  }
+
+  if (isNaN(latitude) || isNaN(longitude)) {
+    throw new Error('Invalid latitude/longitude values.');
+  }
+
+  if (!trackedAt) {
+    throw new Error('Missing required field: trackedAt');
+  }
+
+  const spreadsheetId = _resolveSpreadsheetIdForBranch(branchName);
+  const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+  const sheet = _getOrCreateSheet(spreadsheet, 'InstallerTracking');
+
+  _ensureInstallerTrackingHeader(sheet);
+
+  const row = [
+    _nowTimestamp(),
+    trackedAt,
+    branchName,
+    installerName,
+    latitude,
+    longitude,
+    _toFloat(payload.accuracy, ''),
+    _toFloat(payload.speed, ''),
+    _toFloat(payload.heading, ''),
+    _toFloat(payload.altitude, ''),
+    _string(payload.sessionId),
+    _string(payload.isMocked),
+    _string(payload.source),
+  ];
+
+  sheet.appendRow(row);
+
+  return _jsonResponse({
+    success: true,
+    message: 'Installer location tracked.',
+    branch: branchName,
+    installerName: installerName,
+    trackedAt: trackedAt,
+    scriptTimestamp: _nowTimestamp(),
+  }, 200);
 }
 
 function _handleDeleteEntry(e) {
@@ -207,6 +285,7 @@ function _handleAdminData(e) {
   const branchNames = Object.keys(CONFIG.BRANCH_SHEET_IDS);
   const branchSummaries = [];
   const recentSubmissions = [];
+  const recentInstallerLocations = [];
 
   branchNames.forEach((branchName) => {
     if (selectedBranch !== 'ALL' && selectedBranch !== branchName) return;
@@ -219,6 +298,9 @@ function _handleAdminData(e) {
     const summary = _buildBranchSummary(branchName, spreadsheetId, sheet, cappedLimit);
     branchSummaries.push(summary.branch);
     summary.recentRows.forEach((row) => recentSubmissions.push(row));
+
+    const trackingRows = _buildBranchTrackingRows(branchName, spreadsheetId, cappedLimit);
+    trackingRows.forEach((row) => recentInstallerLocations.push(row));
   });
 
   recentSubmissions.sort((a, b) => {
@@ -227,7 +309,14 @@ function _handleAdminData(e) {
     return bTime - aTime;
   });
 
+  recentInstallerLocations.sort((a, b) => {
+    const aTime = new Date(a.trackedAt || a.scriptTimestamp).getTime();
+    const bTime = new Date(b.trackedAt || b.scriptTimestamp).getTime();
+    return bTime - aTime;
+  });
+
   const finalRows = recentSubmissions.slice(0, cappedLimit);
+  const finalTrackingRows = recentInstallerLocations.slice(0, cappedLimit);
   const totalSubmissions = branchSummaries.reduce((sum, item) => sum + item.totalRows, 0);
 
   return _jsonResponse({
@@ -236,8 +325,35 @@ function _handleAdminData(e) {
     totalSubmissions: totalSubmissions,
     branches: branchSummaries,
     recentSubmissions: finalRows,
+    recentInstallerLocations: finalTrackingRows,
     scriptTimestamp: _nowTimestamp(),
   }, 200);
+}
+
+function _buildBranchTrackingRows(branchName, spreadsheetId, limit) {
+  const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+  const sheet = spreadsheet.getSheetByName('InstallerTracking');
+  if (!sheet) return [];
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return [];
+
+  const columnCount = Math.max(sheet.getLastColumn(), INSTALLER_TRACKING_HEADERS.length);
+  const count = Math.min(limit, lastRow - 1);
+  const startRow = lastRow - count + 1;
+  const values = sheet.getRange(startRow, 1, count, columnCount).getValues();
+
+  return values
+    .map((row) => ({
+      branch: _string(row[2]) || branchName,
+      installerName: _string(row[3]),
+      latitude: _toFloat(row[4], 0),
+      longitude: _toFloat(row[5], 0),
+      trackedAt: _normalizeTimestamp(row[1]),
+      scriptTimestamp: _normalizeTimestamp(row[0]),
+      sessionId: _string(row[10]),
+    }))
+    .filter((row) => row.installerName && !isNaN(row.latitude) && !isNaN(row.longitude));
 }
 
 function _buildBranchSummary(branchName, spreadsheetId, sheet, limit) {
@@ -528,6 +644,18 @@ function _ensureHeader(sheet) {
   sheet.appendRow(SHEET_HEADERS_V2);
 }
 
+function _ensureInstallerTrackingHeader(sheet) {
+  if (sheet.getLastRow() <= 0) {
+    sheet.appendRow(INSTALLER_TRACKING_HEADERS);
+    return;
+  }
+
+  _ensureColumnCount(sheet, INSTALLER_TRACKING_HEADERS.length);
+  sheet
+    .getRange(1, 1, 1, INSTALLER_TRACKING_HEADERS.length)
+    .setValues([INSTALLER_TRACKING_HEADERS]);
+}
+
 function _removeSubmittedAtColumnIfPresent(sheet) {
   if (sheet.getLastRow() < 1) return;
 
@@ -610,6 +738,11 @@ function _jsonResponse(payload, statusCode) {
 
 function _toInt(value, fallbackValue) {
   const parsed = parseInt(String(value), 10);
+  return isNaN(parsed) ? fallbackValue : parsed;
+}
+
+function _toFloat(value, fallbackValue) {
+  const parsed = parseFloat(String(value));
   return isNaN(parsed) ? fallbackValue : parsed;
 }
 

@@ -46,6 +46,7 @@ Use the same base URL with different `action` query params:
 - Upload endpoint: `<WEB_APP_URL>?action=uploadImage`
 - Submit endpoint: `<WEB_APP_URL>?action=submitForm`
 - Admin endpoint: `<WEB_APP_URL>?action=adminData`
+- Installer GPS tracking endpoint: `<WEB_APP_URL>?action=trackInstallerLocation`
 
 Run command:
 
@@ -54,7 +55,8 @@ flutter run \
   --dart-define=GDRIVE_UPLOAD_MODE=apps_script \
   --dart-define=GDRIVE_UPLOAD_URL=<WEB_APP_URL>?action=uploadImage \
   --dart-define=GSHEETS_SUBMIT_URL=<WEB_APP_URL>?action=submitForm \
-  --dart-define=ADMIN_DATA_URL=<WEB_APP_URL>?action=adminData
+  --dart-define=ADMIN_DATA_URL=<WEB_APP_URL>?action=adminData \
+  --dart-define=INSTALLER_TRACK_URL=<WEB_APP_URL>?action=trackInstallerLocation
 ```
 
 ## 5) Expected Request Shapes
@@ -83,6 +85,27 @@ GET with query params:
 - `action=adminData`
 - `branch=ALL` or exact branch name
 - `limit=25` (optional)
+
+### Installer GPS tracking
+
+JSON body fields:
+- `installerName`
+- `branch`
+- `latitude`
+- `longitude`
+- `trackedAt`
+
+Optional fields:
+- `sessionId`
+- `accuracy`
+- `speed`
+- `heading`
+- `altitude`
+- `isMocked`
+- `source`
+
+Storage destination:
+- The script appends rows to an `InstallerTracking` sheet inside the spreadsheet mapped to the provided `branch`.
 
 ## Notes
 

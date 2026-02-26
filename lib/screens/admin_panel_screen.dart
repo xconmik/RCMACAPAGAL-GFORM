@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:intl/intl.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../models/admin_data.dart';
 import '../services/admin_service.dart';
@@ -477,6 +479,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   Widget _buildDashboardView(AdminDashboardData dashboard) {
     final filtered = _filteredSubmissions(dashboard.recentSubmissions);
     final historyFiltered = _applyHistoryFilter(filtered);
+    final mapPoints = _latestTrackingPerInstaller(
+      dashboard.recentInstallerLocations,
+    );
 
     final activeBranchCount =
         dashboard.branches.where((branch) => branch.totalRows > 0).length;
@@ -495,6 +500,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 Icons.table_rows_outlined),
           ],
         ),
+        const SizedBox(height: 14),
+        _buildInstallerMapCard(mapPoints),
         const SizedBox(height: 14),
         const Text('History Range',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
@@ -1784,6 +1791,158 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                       fontSize: 22, fontWeight: FontWeight.w900)),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  List<AdminTrackingLocation> _latestTrackingPerInstaller(
+    List<AdminTrackingLocation> points,
+  ) {
+    final selectedBranch = _selectedBranch;
+    final latestByInstaller = <String, AdminTrackingLocation>{};
+
+    for (final point in points) {
+      if (selectedBranch != 'ALL' && point.branch != selectedBranch) continue;
+      if (point.latitude == 0 && point.longitude == 0) continue;
+
+      final installerKey = '${point.branch}|${point.installerName}'.trim();
+      if (installerKey.isEmpty) continue;
+
+      final existing = latestByInstaller[installerKey];
+      if (existing == null) {
+        latestByInstaller[installerKey] = point;
+        continue;
+      }
+
+      final existingTime = DateTime.tryParse(existing.trackedAt) ??
+          DateTime.tryParse(existing.scriptTimestamp) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final currentTime = DateTime.tryParse(point.trackedAt) ??
+          DateTime.tryParse(point.scriptTimestamp) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+
+      if (currentTime.isAfter(existingTime)) {
+        latestByInstaller[installerKey] = point;
+      }
+    }
+
+    final items = latestByInstaller.values.toList();
+    items.sort((a, b) {
+      final aTime = DateTime.tryParse(a.trackedAt) ??
+          DateTime.tryParse(a.scriptTimestamp) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final bTime = DateTime.tryParse(b.trackedAt) ??
+          DateTime.tryParse(b.scriptTimestamp) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      return bTime.compareTo(aTime);
+    });
+    return items;
+  }
+
+  Widget _buildInstallerMapCard(List<AdminTrackingLocation> points) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Installer GPS Map',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                ),
+                Text(
+                  'Active markers: ${points.length}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black54,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (points.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(8),
+                child: Text(
+                  'No installer GPS data yet. Start tracking from Installer GPS Map in mobile app.',
+                ),
+              )
+            else ...[
+              SizedBox(
+                height: 360,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: FlutterMap(
+                    options: MapOptions(
+                      initialCenter: LatLng(
+                        points.first.latitude,
+                        points.first.longitude,
+                      ),
+                      initialZoom: 11,
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate:
+                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.rcmacapagal.gform',
+                      ),
+                      MarkerLayer(
+                        markers: points
+                            .map(
+                              (point) => Marker(
+                                point: LatLng(point.latitude, point.longitude),
+                                width: 44,
+                                height: 44,
+                                child: Tooltip(
+                                  message:
+                                      '${point.installerName} (${point.branch})\n${_formatTimestamp(point.trackedAt.isNotEmpty ? point.trackedAt : point.scriptTimestamp)}',
+                                  child: const Icon(
+                                    Icons.location_on,
+                                    color: Colors.red,
+                                    size: 34,
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: points
+                    .take(12)
+                    .map(
+                      (point) => Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${point.installerName} • ${point.branch} • ${_formatTimestamp(point.trackedAt.isNotEmpty ? point.trackedAt : point.scriptTimestamp)}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+          ],
         ),
       ),
     );

@@ -10,6 +10,7 @@ The app reads endpoint URLs from `--dart-define` values:
 - `GSHEETS_SUBMIT_URL`: endpoint that accepts JSON form payload.
 - `GDRIVE_UPLOAD_MODE`: use `multipart` (default) or `apps_script`.
 - `ADMIN_DATA_URL` (optional): endpoint for admin dashboard data; if empty, app derives it from `GSHEETS_SUBMIT_URL` using `action=adminData`.
+- `INSTALLER_TRACK_URL` (optional): endpoint for live installer GPS tracking; if empty, app derives it from `GSHEETS_SUBMIT_URL` using `action=trackInstallerLocation`.
 
 If either value is empty, the app uses built-in mock behavior for that part.
 
@@ -22,5 +23,27 @@ flutter run \
 	--dart-define=GDRIVE_UPLOAD_MODE=apps_script \
 	--dart-define=GDRIVE_UPLOAD_URL=https://script.google.com/macros/s/AKfycbxKq50oJiSVKWOudPh1Do9leh0_MetObyu4s5xqK5sVRfmD-EvuraVbKVog0WMdY6trUg/exec?action=uploadImage \
 	--dart-define=GSHEETS_SUBMIT_URL=https://script.google.com/macros/s/AKfycbxKq50oJiSVKWOudPh1Do9leh0_MetObyu4s5xqK5sVRfmD-EvuraVbKVog0WMdY6trUg/exec?action=submitForm \
-	--dart-define=ADMIN_DATA_URL=https://script.google.com/macros/s/AKfycbxKq50oJiSVKWOudPh1Do9leh0_MetObyu4s5xqK5sVRfmD-EvuraVbKVog0WMdY6trUg/exec?action=adminData
+	--dart-define=ADMIN_DATA_URL=https://script.google.com/macros/s/AKfycbxKq50oJiSVKWOudPh1Do9leh0_MetObyu4s5xqK5sVRfmD-EvuraVbKVog0WMdY6trUg/exec?action=adminData \
+	--dart-define=INSTALLER_TRACK_URL=https://script.google.com/macros/s/AKfycbxKq50oJiSVKWOudPh1Do9leh0_MetObyu4s5xqK5sVRfmD-EvuraVbKVog0WMdY6trUg/exec?action=trackInstallerLocation
 ```
+
+## Deploy Admin Panel on Vercel (Live)
+
+This project includes:
+- `vercel.json`
+- `tools/vercel_build.sh`
+
+Steps:
+1. Push this repository to GitHub.
+2. In Vercel, import the repository as a new project.
+3. In **Project Settings > Environment Variables**, add:
+	- `GDRIVE_UPLOAD_MODE=apps_script`
+	- `GDRIVE_UPLOAD_URL=<WEB_APP_URL>?action=uploadImage`
+	- `GSHEETS_SUBMIT_URL=<WEB_APP_URL>?action=submitForm`
+	- `ADMIN_DATA_URL=<WEB_APP_URL>?action=adminData`
+	- `INSTALLER_TRACK_URL=<WEB_APP_URL>?action=trackInstallerLocation`
+4. Deploy.
+
+Notes:
+- Web app opens directly to the admin dashboard (`kIsWeb -> AdminPanelScreen`).
+- Vercel serves SPA routes via fallback to `index.html`.
