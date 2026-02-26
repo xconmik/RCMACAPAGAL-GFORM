@@ -1950,7 +1950,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                     children: [
                       TileLayer(
                         urlTemplate:
-                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
                         userAgentPackageName: 'com.rcmacapagal.gform',
                       ),
                       MarkerLayer(
