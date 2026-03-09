@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../services/installer_auth_service.dart';
+import '../services/installer_tracking_service.dart';
 import '../services/local_storage_service.dart';
 import 'installer_history_screen.dart';
 import 'installer_login_screen.dart';
@@ -28,12 +30,18 @@ class _InstallerDashboardScreenState extends State<InstallerDashboardScreen> {
   ];
 
   final LocalStorageService _localStorageService = LocalStorageService();
+  final InstallerTrackingService _trackingService = InstallerTrackingService();
   late InstallerProfile _profile;
+  bool _isSendingLoginPing = false;
+  String? _locationHint;
 
   @override
   void initState() {
     super.initState();
     _profile = widget.profile;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _sendLoginPingIfPossible();
+    });
   }
 
   bool get _hasActiveBranch => _profile.branch.trim().isNotEmpty;
@@ -47,7 +55,78 @@ class _InstallerDashboardScreenState extends State<InstallerDashboardScreen> {
     if (!mounted) return;
     setState(() {
       _profile = updatedProfile;
+      _locationHint = 'Branch set to ${updatedProfile.branch}. Sending location...';
     });
+
+    await _sendLoginPingIfPossible(force: true);
+  }
+
+  Future<void> _sendLoginPingIfPossible({bool force = false}) async {
+    if (!_hasActiveBranch || _isSendingLoginPing) return;
+    if (!force && _locationHint == 'Current location shared to admin map.') {
+      return;
+    }
+
+    _isSendingLoginPing = true;
+
+    try {
+      final hasPermission = await _ensureLocationPermission();
+      if (!hasPermission) {
+        if (!mounted) return;
+        setState(() {
+          _locationHint =
+              'Allow location access so your marker appears in the admin map.';
+        });
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+
+      await _trackingService.submitTrackingPoint(
+        installerId: _profile.installerId,
+        installerName: _profile.installerName,
+        branch: _profile.branch,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        trackedAt: position.timestamp ?? DateTime.now(),
+        sessionId: 'dashboard-${DateTime.now().millisecondsSinceEpoch}',
+        accuracy: position.accuracy,
+        speed: position.speed,
+        heading: position.heading,
+        altitude: position.altitude,
+        isMocked: position.isMocked,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _locationHint = 'Current location shared to admin map.';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _locationHint =
+            'Unable to send current location automatically. Open GPS Tracker and start tracking.';
+      });
+    } finally {
+      _isSendingLoginPing = false;
+    }
+  }
+
+  Future<bool> _ensureLocationPermission() async {
+    final enabled = await Geolocator.isLocationServiceEnabled();
+    if (!enabled) return false;
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    return permission != LocationPermission.denied &&
+        permission != LocationPermission.deniedForever;
   }
 
   Future<void> _logout() async {
@@ -166,6 +245,20 @@ class _InstallerDashboardScreenState extends State<InstallerDashboardScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
+                      if (_locationHint != null) ...[
+                        Text(
+                          _locationHint!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: _locationHint ==
+                                    'Current location shared to admin map.'
+                                ? Colors.green.shade700
+                                : Colors.black54,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                       FilledButton(
                         onPressed: !_hasActiveBranch
                             ? null
@@ -194,6 +287,16 @@ class _InstallerDashboardScreenState extends State<InstallerDashboardScreen> {
                                 );
                               },
                         child: const Text('Open GPS Tracker'),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'A quick location ping is sent after login or branch selection. Use GPS Tracker for continuous live updates.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.black54,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(height: 10),
                       OutlinedButton(
