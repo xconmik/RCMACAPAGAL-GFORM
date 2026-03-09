@@ -82,6 +82,13 @@ class _InstallerLoginScreenState extends State<InstallerLoginScreen> {
     }
   }
 
+  Future<void> _continueAsGuest() async {
+    final profile = InstallerProfile.guest();
+    await _localStorageService.saveInstallerSession(profile.toJson());
+    if (!mounted) return;
+    _openDashboard(profile);
+  }
+
   void _openDashboard(InstallerProfile profile) {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
@@ -157,6 +164,21 @@ class _InstallerLoginScreenState extends State<InstallerLoginScreen> {
                               onPressed: _isLoggingIn ? null : _login,
                               child: Text(
                                 _isLoggingIn ? 'Signing in...' : 'Login',
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            OutlinedButton(
+                              onPressed: _isLoggingIn ? null : _continueAsGuest,
+                              child: const Text('Continue as Guest Tester'),
+                            ),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'Guest Mode is for testing only. Branch selection is still required before using the form or tracker.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.black54,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                             if (_error != null) ...[

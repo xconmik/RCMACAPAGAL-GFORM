@@ -89,7 +89,9 @@ class _InstallerDashboardScreenState extends State<InstallerDashboardScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        _profile.installerName,
+                        _profile.isGuest
+                            ? 'GUEST MODE'
+                            : _profile.installerName,
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           fontSize: 24,
@@ -98,10 +100,24 @@ class _InstallerDashboardScreenState extends State<InstallerDashboardScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Installer ID: ${_profile.installerId}',
+                        _profile.isGuest
+                            ? 'Tester access without live login'
+                            : 'Installer ID: ${_profile.installerId}',
                         textAlign: TextAlign.center,
                         style: const TextStyle(color: Colors.black54),
                       ),
+                      if (_profile.isGuest) ...[
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Use this only for testing. Submitted data will still use the selected branch.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.black54,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       if (_profile.allowsBranchSelection)
                         DropdownButtonFormField<String>(

@@ -19,14 +19,19 @@ class AppsScriptHttpService {
 
     try {
       Uri currentUri = uri;
+      var method = 'POST';
 
       for (var redirectCount = 0;
           redirectCount <= _maxRedirects;
           redirectCount++) {
-        final request = http.Request('POST', currentUri)
+        final request = http.Request(method, currentUri)
           ..followRedirects = false
-          ..headers['Content-Type'] = 'application/json'
-          ..body = encodedBody;
+          ..headers['Accept'] = 'application/json, text/plain, */*';
+
+        if (method == 'POST') {
+          request.headers['Content-Type'] = 'application/json';
+          request.body = encodedBody;
+        }
 
         final streamedResponse = await client.send(request).timeout(timeout);
         final response =
@@ -42,6 +47,7 @@ class AppsScriptHttpService {
         }
 
         currentUri = currentUri.resolve(location);
+        method = _redirectMethod(response.statusCode, method);
       }
 
       throw Exception('Request redirected too many times.');
@@ -60,5 +66,14 @@ class AppsScriptHttpService {
         statusCode == HttpStatus.seeOther ||
         statusCode == HttpStatus.temporaryRedirect ||
         statusCode == HttpStatus.permanentRedirect;
+  }
+
+  String _redirectMethod(int statusCode, String currentMethod) {
+    if (statusCode == HttpStatus.temporaryRedirect ||
+        statusCode == HttpStatus.permanentRedirect) {
+      return currentMethod;
+    }
+
+    return 'GET';
   }
 }

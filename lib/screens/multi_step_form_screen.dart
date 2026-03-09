@@ -85,7 +85,9 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
   bool get _isEditMode => widget.initialSubmission != null;
   InstallerProfile? get _prefilledInstallerProfile =>
       _isEditMode ? null : widget.initialInstallerProfile;
-  bool get _hasLockedInstallerProfile => _prefilledInstallerProfile != null;
+  bool get _hasLockedInstallerProfile =>
+      _prefilledInstallerProfile != null &&
+      _prefilledInstallerProfile!.isGuest != true;
   bool get _requiresRefusalForm {
     return _formData.signageQuantity == 'REFUSED' ||
         _formData.awningQuantity == 'REFUSED' ||
