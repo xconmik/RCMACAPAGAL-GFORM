@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'screens/admin_panel_screen.dart';
-import 'screens/home_screen.dart';
+import 'screens/installer_login_screen.dart';
 
 void main() {
   runApp(const RcMacapagalGformApp());
@@ -20,7 +20,7 @@ class RcMacapagalGformApp extends StatelessWidget {
         useMaterial3: true,
         scaffoldBackgroundColor: const Color(0xFFF7F8FA),
       ),
-      home: kIsWeb ? const AdminPanelScreen() : const HomeScreen(),
+      home: kIsWeb ? const AdminPanelScreen() : const InstallerLoginScreen(),
     );
   }
 }

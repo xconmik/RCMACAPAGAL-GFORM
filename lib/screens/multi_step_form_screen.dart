@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../models/admin_data.dart';
 import '../models/captured_image_data.dart';
 import '../models/installation_form_data.dart';
+import '../services/installer_auth_service.dart';
 import '../services/image_capture_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/location_catalog_service.dart';
@@ -14,9 +15,14 @@ import '../widgets/primary_action_button.dart';
 import '../widgets/step_card.dart';
 
 class MultiStepFormScreen extends StatefulWidget {
-  const MultiStepFormScreen({super.key, this.initialSubmission});
+  const MultiStepFormScreen({
+    super.key,
+    this.initialSubmission,
+    this.initialInstallerProfile,
+  });
 
   final AdminSubmission? initialSubmission;
+  final InstallerProfile? initialInstallerProfile;
 
   @override
   State<MultiStepFormScreen> createState() => _MultiStepFormScreenState();
@@ -64,6 +70,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
   bool _isUploadingBefore = false;
   bool _isUploadingAfter = false;
   bool _isUploadingCompletion = false;
+  bool _isUploadingRefusal = false;
   bool _isLocationCatalogLoading = true;
   String? _locationCatalogError;
   String? _selectedMunicipality;
@@ -76,6 +83,14 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
       const <String, Map<String, List<String>>>{};
 
   bool get _isEditMode => widget.initialSubmission != null;
+  InstallerProfile? get _prefilledInstallerProfile =>
+      _isEditMode ? null : widget.initialInstallerProfile;
+  bool get _hasLockedInstallerProfile => _prefilledInstallerProfile != null;
+  bool get _requiresRefusalForm {
+    return _formData.signageQuantity == 'REFUSED' ||
+        _formData.awningQuantity == 'REFUSED' ||
+        _formData.flangeQuantity == 'REFUSED';
+  }
 
   @override
   void initState() {
@@ -83,6 +98,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     WidgetsBinding.instance.addObserver(this);
     if (_isEditMode) {
       _restoreSubmissionForEditing(widget.initialSubmission!);
+    } else if (_prefilledInstallerProfile != null) {
+      _applyInstallerProfileDefaults(_prefilledInstallerProfile!);
     }
     _loadLocationCatalog();
     if (!_isEditMode) {
@@ -285,6 +302,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
       _formData.afterImage = _capturedImageFromDraft(draft['afterImage']);
       _formData.completionImage =
           _capturedImageFromDraft(draft['completionImage']);
+      _formData.refusalImage = _capturedImageFromDraft(draft['refusalImage']);
 
       _formData.brands
         ..clear()
@@ -316,6 +334,10 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     _signageOtherController.text = _formData.signageQuantityOther ?? '';
     _awningOtherController.text = _formData.awningQuantityOther ?? '';
     _flangeOtherController.text = _formData.flangeQuantityOther ?? '';
+
+    if (_prefilledInstallerProfile != null) {
+      _applyInstallerProfileDefaults(_prefilledInstallerProfile!);
+    }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -357,6 +379,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     _formData.beforeImage = null;
     _formData.afterImage = null;
     _formData.completionImage = null;
+    _formData.refusalImage = null;
     _formData.signageQuantity = signageSelection.selection;
     _formData.signageQuantityOther = signageSelection.otherValue;
     _formData.awningQuantity = awningSelection.selection;
@@ -396,6 +419,17 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     }
 
     return _QuantitySelection(selection: 'OTHERS', otherValue: trimmed);
+  }
+
+  void _applyInstallerProfileDefaults(InstallerProfile profile) {
+    if (profile.branch.trim().isNotEmpty) {
+      _formData.branch = profile.branch.trim();
+    }
+
+    if (profile.installerName.trim().isNotEmpty) {
+      _formData.fullName = profile.installerName.trim();
+      _fullNameController.text = profile.installerName.trim();
+    }
   }
 
   Future<void> _goNext() async {
@@ -539,6 +573,10 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
             : null;
         return true;
       case 10:
+        if (_requiresRefusalForm && _formData.refusalImage == null) {
+          _showError('Please upload the refusal form before submitting.');
+          return false;
+        }
         return true;
       default:
         return true;
@@ -551,6 +589,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
         if (imageType == 'before') _isUploadingBefore = true;
         if (imageType == 'after') _isUploadingAfter = true;
         if (imageType == 'completion') _isUploadingCompletion = true;
+        if (imageType == 'refusal') _isUploadingRefusal = true;
       });
 
       final imageData = await _imageCaptureService.captureWithGps(
@@ -564,6 +603,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
         if (imageType == 'before') _formData.beforeImage = imageData;
         if (imageType == 'after') _formData.afterImage = imageData;
         if (imageType == 'completion') _formData.completionImage = imageData;
+        if (imageType == 'refusal') _formData.refusalImage = imageData;
       });
     } catch (e) {
       if (!mounted) return;
@@ -574,6 +614,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
           if (imageType == 'before') _isUploadingBefore = false;
           if (imageType == 'after') _isUploadingAfter = false;
           if (imageType == 'completion') _isUploadingCompletion = false;
+          if (imageType == 'refusal') _isUploadingRefusal = false;
         });
       }
     }
@@ -584,6 +625,11 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
         _formData.afterImage == null ||
         _formData.completionImage == null) {
       _showError('Please upload all required images before submitting.');
+      return;
+    }
+
+    if (_requiresRefusalForm && _formData.refusalImage == null) {
+      _showError('Please upload the refusal form before submitting.');
       return;
     }
 
@@ -598,12 +644,17 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
           await _uploadService.uploadImageToGoogleDrive(_formData.afterImage!);
       final completionUrl = await _uploadService
           .uploadImageToGoogleDrive(_formData.completionImage!);
+      final refusalUrl = _formData.refusalImage == null
+          ? ''
+          : await _uploadService
+              .uploadImageToGoogleDrive(_formData.refusalImage!);
 
       final payload = _formData.toJson()
         ..addAll({
           'beforeImageDriveUrl': beforeUrl,
           'afterImageDriveUrl': afterUrl,
           'completionImageDriveUrl': completionUrl,
+          'refusalImageDriveUrl': refusalUrl,
         });
 
       if (_isEditMode) {
@@ -690,6 +741,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     _formData.beforeImage = null;
     _formData.afterImage = null;
     _formData.completionImage = null;
+    _formData.refusalImage = null;
 
     _fullNameController.clear();
     _outletCodeController.clear();
@@ -777,17 +829,18 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
                   ),
                 )
                 .toList(),
-            onChanged: _branches.isEmpty || _isEditMode
-                ? null
-                : (value) {
-                    setState(() {
-                      _formData.branch = value;
-                      _selectedMunicipality = null;
-                      _selectedBarangay = null;
-                      _formData.municipality = null;
-                      _formData.barangay = null;
-                    });
-                  },
+            onChanged:
+                _branches.isEmpty || _isEditMode || _hasLockedInstallerProfile
+                    ? null
+                    : (value) {
+                        setState(() {
+                          _formData.branch = value;
+                          _selectedMunicipality = null;
+                          _selectedBarangay = null;
+                          _formData.municipality = null;
+                          _formData.barangay = null;
+                        });
+                      },
           ),
           if (_branches.isEmpty) ...[
             const SizedBox(height: 12),
@@ -1114,6 +1167,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
                       title: 'INSTALLER NAME',
                       controller: _fullNameController,
                       buttonLabel: 'NEXT',
+                      enabled: !_hasLockedInstallerProfile,
                     ),
                     _buildTextStep(
                       title: 'OUTLET CODE',
@@ -1258,6 +1312,18 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
                                   'completion', ImageSource.camera),
                               onAlbumUpload: () => _captureImage(
                                   'completion', ImageSource.gallery),
+                            ),
+                            const SizedBox(height: 12),
+                            _buildUploadSection(
+                              title: _requiresRefusalForm
+                                  ? 'REFUSAL FORM (REQUIRED)'
+                                  : 'REFUSAL FORM (OPTIONAL)',
+                              imageData: _formData.refusalImage,
+                              isUploading: _isUploadingRefusal,
+                              onCameraUpload: () =>
+                                  _captureImage('refusal', ImageSource.camera),
+                              onAlbumUpload: () =>
+                                  _captureImage('refusal', ImageSource.gallery),
                             ),
                             const SizedBox(height: 16),
                             PrimaryActionButton(

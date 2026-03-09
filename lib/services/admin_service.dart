@@ -3,9 +3,12 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/admin_data.dart';
+import 'apps_script_http_service.dart';
 import 'api_endpoints.dart';
 
 class AdminService {
+  final AppsScriptHttpService _httpService = const AppsScriptHttpService();
+
   Future<AdminDashboardData> fetchDashboardData({
     String branch = 'ALL',
     int limit = 25,
@@ -40,7 +43,8 @@ class AdminService {
     }
 
     if (decoded['success'] != true) {
-      throw Exception(decoded['error']?.toString() ?? 'Failed to load admin data.');
+      throw Exception(
+          decoded['error']?.toString() ?? 'Failed to load admin data.');
     }
 
     return AdminDashboardData.fromJson(decoded);
@@ -64,13 +68,12 @@ class AdminService {
       },
     );
 
-    final response = await http.post(
+    final response = await _httpService.postJson(
       uri,
-      headers: const {'Content-Type': 'text/plain;charset=UTF-8'},
-      body: jsonEncode({
+      {
         'branch': branch,
         'rowNumber': rowNumber,
-      }),
+      },
     );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -85,7 +88,8 @@ class AdminService {
     }
 
     if (decoded['success'] != true) {
-      throw Exception(decoded['error']?.toString() ?? 'Failed to delete entry.');
+      throw Exception(
+          decoded['error']?.toString() ?? 'Failed to delete entry.');
     }
   }
 }

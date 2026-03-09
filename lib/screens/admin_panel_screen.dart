@@ -1417,7 +1417,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         final entry = submissions[index];
         final hasImages = entry.beforeImageDriveUrl.trim().isNotEmpty ||
             entry.afterImageDriveUrl.trim().isNotEmpty ||
-            entry.completionImageDriveUrl.trim().isNotEmpty;
+            entry.completionImageDriveUrl.trim().isNotEmpty ||
+            entry.refusalImageDriveUrl.trim().isNotEmpty;
 
         return Padding(
           padding: const EdgeInsets.all(12),
@@ -1484,6 +1485,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                   const SizedBox(height: 12),
                   _buildImagePreviewTile(
                       'Completion', entry.completionImageDriveUrl),
+                  const SizedBox(height: 12),
+                  _buildImagePreviewTile('Refusal', entry.refusalImageDriveUrl),
                 ],
               ),
             ),

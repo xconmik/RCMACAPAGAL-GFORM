@@ -9,13 +9,24 @@ import '../services/installer_tracking_service.dart';
 import '../services/local_storage_service.dart';
 
 class InstallerTrackerScreen extends StatefulWidget {
-  const InstallerTrackerScreen({super.key});
+  const InstallerTrackerScreen({super.key, this.initialProfile});
+
+  final InstallerProfile? initialProfile;
 
   @override
   State<InstallerTrackerScreen> createState() => _InstallerTrackerScreenState();
 }
 
 class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
+  static const List<String> _branchOptions = [
+    'Bulacan',
+    'DSO Talavera',
+    'DSO Tarlac',
+    'DSO Pampanga',
+    'DSO Villasis',
+    'DSO Bantay',
+  ];
+
   final InstallerAuthService _authService = InstallerAuthService();
   final InstallerTrackingService _trackingService = InstallerTrackingService();
   final LocalStorageService _localStorageService = LocalStorageService();
@@ -39,7 +50,14 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
   void initState() {
     super.initState();
     _sessionId = DateTime.now().millisecondsSinceEpoch.toString();
-    _restoreSession();
+    if (widget.initialProfile != null) {
+      _profile = widget.initialProfile;
+      _status = _hasActiveBranch(widget.initialProfile!)
+          ? 'Profile loaded. Start shift tracking when ready.'
+          : 'Profile loaded. Select branch before tracking.';
+    } else {
+      _restoreSession();
+    }
   }
 
   @override
@@ -55,13 +73,15 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
     if (!mounted || session == null) return;
 
     final profile = InstallerProfile.fromJson(session);
-    if (profile.installerId.trim().isEmpty || profile.branch.trim().isEmpty) {
+    if (profile.installerId.trim().isEmpty) {
       return;
     }
 
     setState(() {
       _profile = profile;
-      _status = 'Profile loaded. Start shift tracking when ready.';
+      _status = _hasActiveBranch(profile)
+          ? 'Profile loaded. Start shift tracking when ready.'
+          : 'Profile loaded. Select branch before tracking.';
     });
   }
 
@@ -90,7 +110,9 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
       if (!mounted) return;
       setState(() {
         _profile = profile;
-        _status = 'Logged in. You can now start shift tracking.';
+        _status = _hasActiveBranch(profile)
+            ? 'Logged in. You can now start shift tracking.'
+            : 'Logged in. Select your branch before tracking.';
       });
     } catch (e) {
       if (!mounted) return;
@@ -150,6 +172,13 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
     if (profile == null) {
       setState(() {
         _error = 'Login first before tracking.';
+      });
+      return;
+    }
+
+    if (!_hasActiveBranch(profile)) {
+      setState(() {
+        _error = 'Select branch first before tracking.';
       });
       return;
     }
@@ -247,6 +276,25 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
     }
   }
 
+  bool _hasActiveBranch(InstallerProfile profile) {
+    return profile.branch.trim().isNotEmpty;
+  }
+
+  Future<void> _updateActiveBranch(String? branch) async {
+    final profile = _profile;
+    if (profile == null || branch == null || branch.trim().isEmpty) return;
+
+    final updatedProfile = profile.copyWith(branch: branch.trim());
+    await _localStorageService.saveInstallerSession(updatedProfile.toJson());
+
+    if (!mounted) return;
+    setState(() {
+      _profile = updatedProfile;
+      _status = 'Branch set to ${updatedProfile.branch}.';
+      _error = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final profile = _profile;
@@ -298,7 +346,29 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text('Installer ID: ${profile.installerId}'),
-                        Text('Branch: ${profile.branch}'),
+                        if (profile.allowsBranchSelection) ...[
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<String>(
+                            initialValue:
+                                _branchOptions.contains(profile.branch)
+                                    ? profile.branch
+                                    : null,
+                            decoration: const InputDecoration(
+                              labelText: 'Active Branch',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: _branchOptions
+                                .map(
+                                  (branch) => DropdownMenuItem<String>(
+                                    value: branch,
+                                    child: Text(branch),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: _updateActiveBranch,
+                          ),
+                        ] else
+                          Text('Branch: ${profile.branch}'),
                       ],
                     ),
                   ),
@@ -312,14 +382,16 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
                 ),
                 const SizedBox(height: 8),
                 OutlinedButton(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) =>
-                            InstallerHistoryScreen(profile: profile),
-                      ),
-                    );
-                  },
+                  onPressed: !_hasActiveBranch(profile)
+                      ? null
+                      : () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  InstallerHistoryScreen(profile: profile),
+                            ),
+                          );
+                        },
                   child: const Text('Submission History / Edit'),
                 ),
                 const SizedBox(height: 8),

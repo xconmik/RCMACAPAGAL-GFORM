@@ -1,10 +1,11 @@
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
-
+import 'apps_script_http_service.dart';
 import 'api_endpoints.dart';
 
 class InstallerAuthService {
+  final AppsScriptHttpService _httpService = const AppsScriptHttpService();
+
   Future<InstallerProfile> login({
     required String installerId,
     required String pin,
@@ -13,17 +14,17 @@ class InstallerAuthService {
       throw Exception('Installer login endpoint is not configured.');
     }
 
-    final response = await http.post(
+    final response = await _httpService.postJson(
       Uri.parse(ApiEndpoints.installerLoginUrl),
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({
+      {
         'installerId': installerId,
         'pin': pin,
-      }),
+      },
     );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('Login failed (${response.statusCode}): ${response.body}');
+      throw Exception(
+          'Login failed (${response.statusCode}): ${response.body}');
     }
 
     final decoded = jsonDecode(response.body);
@@ -39,6 +40,7 @@ class InstallerAuthService {
       installerId: (decoded['installerId'] ?? '').toString(),
       installerName: (decoded['installerName'] ?? '').toString(),
       branch: (decoded['branch'] ?? '').toString(),
+      allowsBranchSelection: decoded['allowsBranchSelection'] == true,
       role: (decoded['role'] ?? 'installer').toString(),
     );
   }
@@ -49,19 +51,39 @@ class InstallerProfile {
     required this.installerId,
     required this.installerName,
     required this.branch,
+    required this.allowsBranchSelection,
     required this.role,
   });
 
   final String installerId;
   final String installerName;
   final String branch;
+  final bool allowsBranchSelection;
   final String role;
+
+  InstallerProfile copyWith({
+    String? installerId,
+    String? installerName,
+    String? branch,
+    bool? allowsBranchSelection,
+    String? role,
+  }) {
+    return InstallerProfile(
+      installerId: installerId ?? this.installerId,
+      installerName: installerName ?? this.installerName,
+      branch: branch ?? this.branch,
+      allowsBranchSelection:
+          allowsBranchSelection ?? this.allowsBranchSelection,
+      role: role ?? this.role,
+    );
+  }
 
   Map<String, dynamic> toJson() {
     return {
       'installerId': installerId,
       'installerName': installerName,
       'branch': branch,
+      'allowsBranchSelection': allowsBranchSelection,
       'role': role,
     };
   }
@@ -71,6 +93,7 @@ class InstallerProfile {
       installerId: (json['installerId'] ?? '').toString(),
       installerName: (json['installerName'] ?? '').toString(),
       branch: (json['branch'] ?? '').toString(),
+      allowsBranchSelection: json['allowsBranchSelection'] == true,
       role: (json['role'] ?? 'installer').toString(),
     );
   }

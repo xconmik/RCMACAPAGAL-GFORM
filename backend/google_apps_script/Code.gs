@@ -14,8 +14,14 @@ const CONFIG = {
     sheetName: 'InstallerAccounts',
   },
   INSTALLER_PROFILES: [
-    { installerId: 'installer01', pin: '1234', installerName: 'Installer 01', branch: 'Bulacan', role: 'installer', active: true },
-    { installerId: 'installer02', pin: '1234', installerName: 'Installer 02', branch: 'DSO Talavera', role: 'installer', active: true },
+    { installerId: 'nino.garcia', pin: '1234', installerName: 'NINO GARCIA', branch: 'ANY', role: 'installer', active: true },
+    { installerId: 'marcel.dela.cruz', pin: '1234', installerName: 'MARCEL DELA CRUZ', branch: 'ANY', role: 'installer', active: true },
+    { installerId: 'jayson.turingan', pin: '1234', installerName: 'JAYSON TURINGAN', branch: 'ANY', role: 'installer', active: true },
+    { installerId: 'ariel.dagohoy', pin: '1234', installerName: 'ARIEL DAGOHOY', branch: 'ANY', role: 'installer', active: true },
+    { installerId: 'edwin.dagohoy', pin: '1234', installerName: 'EDWIN DAGOHOY', branch: 'ANY', role: 'installer', active: true },
+    { installerId: 'jayson.maniquiz', pin: '1234', installerName: 'JAYSON MANIQUIZ', branch: 'ANY', role: 'installer', active: true },
+    { installerId: 'joel.valdez', pin: '1234', installerName: 'JOEL VALDEZ', branch: 'ANY', role: 'installer', active: true },
+    { installerId: 'pablo.bernardo', pin: '1234', installerName: 'PABLO BERNARDO', branch: 'ANY', role: 'installer', active: true },
   ],
 };
 
@@ -36,6 +42,7 @@ const SHEET_HEADERS_V2 = [
   'BEFORE(GPS)',
   'AFTER(GPS)',
   'COMPLETION_FORM',
+  'REFUSAL_FORM',
 ];
 
 const INSTALLER_TRACKING_HEADERS = [
@@ -95,6 +102,7 @@ const INSTALLATIONS_BACKUP_HEADERS = [
   'BEFORE(GPS)',
   'AFTER(GPS)',
   'COMPLETION_FORM',
+  'REFUSAL_FORM',
   'RAW_JSON',
 ];
 
@@ -165,11 +173,16 @@ function _handleInstallerLogin(e) {
     }, 401);
   }
 
+  const configuredBranch = _string(profile.branch).trim();
+  const allowsBranchSelection =
+    !configuredBranch || configuredBranch.toUpperCase() === 'ANY';
+
   return _jsonResponse({
     success: true,
     installerId: _string(profile.installerId),
     installerName: _string(profile.installerName),
-    branch: _string(profile.branch),
+    branch: allowsBranchSelection ? '' : configuredBranch,
+    allowsBranchSelection: allowsBranchSelection,
     role: _string(profile.role || 'installer'),
     scriptTimestamp: _nowTimestamp(),
   }, 200);
@@ -256,7 +269,7 @@ function _loadInstallerProfilesFromSheet() {
           active: active,
         };
       })
-      .filter((item) => item.installerId && item.pin && item.installerName && item.branch);
+      .filter((item) => item.installerId && item.pin && item.installerName);
   } catch (error) {
     return [];
   }
@@ -731,10 +744,14 @@ function _mapSheetRowToSubmission(branchName, spreadsheetId, row, rowNumber) {
   const completionImageDriveUrlRaw = isLegacyRow
     ? _string(row[12])
     : (isSplitLocationRow ? _string(row[15]) : _string(row[13]));
+  const refusalImageDriveUrlRaw = isLegacyRow
+    ? ''
+    : (isSplitLocationRow ? _string(row[16]) : _string(row[14]));
 
   const beforeImageDriveUrl = _normalizeDriveImageUrl(beforeImageDriveUrlRaw);
   const afterImageDriveUrl = _normalizeDriveImageUrl(afterImageDriveUrlRaw);
   const completionImageDriveUrl = _normalizeDriveImageUrl(completionImageDriveUrlRaw);
+  const refusalImageDriveUrl = _normalizeDriveImageUrl(refusalImageDriveUrlRaw);
 
   const purok = isLegacyRow
     ? _string(rawPayload.purok)
@@ -766,6 +783,7 @@ function _mapSheetRowToSubmission(branchName, spreadsheetId, row, rowNumber) {
     beforeImageDriveUrl: beforeImageDriveUrl,
     afterImageDriveUrl: afterImageDriveUrl,
     completionImageDriveUrl: completionImageDriveUrl,
+    refusalImageDriveUrl: refusalImageDriveUrl,
   };
 }
 
@@ -990,6 +1008,7 @@ function _buildInstallationRows(payload, timestamp) {
     _nested(payload.beforeImageDriveUrl),
     _nested(payload.afterImageDriveUrl),
     _nested(payload.completionImageDriveUrl),
+    _nested(payload.refusalImageDriveUrl),
   ]);
 }
 
@@ -1150,6 +1169,7 @@ function _archiveInstallationRows(spreadsheet, sourceSheetName, rows, action) {
       values[0],
       values[1],
       values[2],
+      values[20],
       values[3],
       values[4],
       values[5],

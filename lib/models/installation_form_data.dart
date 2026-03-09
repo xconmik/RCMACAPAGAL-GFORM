@@ -20,6 +20,7 @@ class InstallationFormData {
   CapturedImageData? beforeImage;
   CapturedImageData? afterImage;
   CapturedImageData? completionImage;
+  CapturedImageData? refusalImage;
 
   Map<String, dynamic> toJson() {
     return {
@@ -42,6 +43,7 @@ class InstallationFormData {
       'beforeImage': beforeImage?.toJson(),
       'afterImage': afterImage?.toJson(),
       'completionImage': completionImage?.toJson(),
+      'refusalImage': refusalImage?.toJson(),
     };
   }
 }

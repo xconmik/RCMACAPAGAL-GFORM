@@ -310,6 +310,7 @@ class _SubmissionGroup {
       beforeImageDriveUrl: base.beforeImageDriveUrl,
       afterImageDriveUrl: base.afterImageDriveUrl,
       completionImageDriveUrl: base.completionImageDriveUrl,
+      refusalImageDriveUrl: base.refusalImageDriveUrl,
     );
   }
 }

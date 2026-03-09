@@ -37,6 +37,7 @@ class AdminSubmission {
     required this.beforeImageDriveUrl,
     required this.afterImageDriveUrl,
     required this.completionImageDriveUrl,
+    required this.refusalImageDriveUrl,
   });
 
   final String entryId;
@@ -56,6 +57,7 @@ class AdminSubmission {
   final String beforeImageDriveUrl;
   final String afterImageDriveUrl;
   final String completionImageDriveUrl;
+  final String refusalImageDriveUrl;
 
   factory AdminSubmission.fromJson(Map<String, dynamic> json) {
     return AdminSubmission(
@@ -78,6 +80,7 @@ class AdminSubmission {
       afterImageDriveUrl: (json['afterImageDriveUrl'] ?? '').toString(),
       completionImageDriveUrl:
           (json['completionImageDriveUrl'] ?? '').toString(),
+      refusalImageDriveUrl: (json['refusalImageDriveUrl'] ?? '').toString(),
     );
   }
 }
@@ -120,7 +123,8 @@ class AdminDashboardData {
       recentInstallerLocations: trackingJson
           .whereType<Map>()
           .map(
-            (item) => AdminTrackingLocation.fromJson(item.cast<String, dynamic>()),
+            (item) =>
+                AdminTrackingLocation.fromJson(item.cast<String, dynamic>()),
           )
           .toList(),
     );

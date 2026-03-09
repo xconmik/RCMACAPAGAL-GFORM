@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
-
+import 'apps_script_http_service.dart';
 import 'api_endpoints.dart';
 
 class InstallerTrackingService {
   static const Duration _requestTimeout = Duration(seconds: 30);
+  final AppsScriptHttpService _httpService = const AppsScriptHttpService();
 
   Future<void> submitTrackingPoint({
     required String installerId,
@@ -42,11 +42,11 @@ class InstallerTrackingService {
       'source': 'mobile_app',
     };
 
-    final response = await http
-        .post(
+    final response = await _httpService
+        .postJson(
           Uri.parse(ApiEndpoints.installerTrackingUrl),
-          headers: const {'Content-Type': 'application/json'},
-          body: jsonEncode(payload),
+          payload,
+          timeout: _requestTimeout,
         )
         .timeout(_requestTimeout);
 

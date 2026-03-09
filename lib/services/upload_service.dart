@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import 'apps_script_http_service.dart';
 import 'api_endpoints.dart';
 import '../models/captured_image_data.dart';
 
@@ -11,6 +12,7 @@ class UploadService {
   static const Duration _requestTimeout = Duration(seconds: 60);
   static const Duration _uploadTimeout = Duration(seconds: 120);
   static const int _maxUploadBytes = 2 * 1024 * 1024;
+  final AppsScriptHttpService _httpService = const AppsScriptHttpService();
 
   Future<String> uploadImageToGoogleDrive(CapturedImageData imageData) async {
     if (!ApiEndpoints.hasDriveEndpoint) {
@@ -181,30 +183,11 @@ class UploadService {
     Uri uri,
     Map<String, dynamic> payload,
   ) async {
-    try {
-      var response = await http
-          .post(
-            uri,
-            headers: const {'Content-Type': 'application/json'},
-            body: jsonEncode(payload),
-          )
-          .timeout(_requestTimeout);
-
-      if (_isRedirect(response.statusCode)) {
-        final location = response.headers['location'];
-        if (location == null || location.trim().isEmpty) {
-          throw Exception('Upload redirected without location header.');
-        }
-
-        final redirectedUri = Uri.parse(location);
-        response = await http.get(redirectedUri).timeout(_requestTimeout);
-      }
-
-      return response;
-    } on TimeoutException {
-      throw Exception(
-          'Request timed out. Please check internet connection and try again.');
-    }
+    return _httpService.postJson(
+      uri,
+      payload,
+      timeout: _requestTimeout,
+    );
   }
 
   dynamic _tryDecodeJson(String responseBody) {
@@ -213,14 +196,6 @@ class UploadService {
     } catch (_) {
       return null;
     }
-  }
-
-  bool _isRedirect(int statusCode) {
-    return statusCode == HttpStatus.movedPermanently ||
-        statusCode == HttpStatus.found ||
-        statusCode == HttpStatus.seeOther ||
-        statusCode == HttpStatus.temporaryRedirect ||
-        statusCode == HttpStatus.permanentRedirect;
   }
 
   String _normalizeDriveImageUrl(String url) {

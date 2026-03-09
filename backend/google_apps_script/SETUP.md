@@ -145,6 +145,10 @@ Optional columns:
 - `role`
 - `active`
 
+For installers who may work in different branches:
+- Set `branch` to `ANY` or leave it blank in `InstallerAccounts`
+- The mobile app will ask the installer to choose the active branch after login
+
 If `INSTALLER_ACCOUNTS_SHEET.spreadsheetId` is empty, the script reads `InstallerAccounts` from the first configured branch spreadsheet. If the sheet is missing/empty, it falls back to `CONFIG.INSTALLER_PROFILES`.
 
 Quick setup helper:
