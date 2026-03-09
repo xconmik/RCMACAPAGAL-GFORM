@@ -22,11 +22,11 @@ For a ready-to-deploy Google Apps Script backend (Drive upload + Sheets append),
 ```bash
 flutter run \
 	--dart-define=GDRIVE_UPLOAD_MODE=apps_script \
-	--dart-define=GDRIVE_UPLOAD_URL=https://script.google.com/macros/s/AKfycbxKq50oJiSVKWOudPh1Do9leh0_MetObyu4s5xqK5sVRfmD-EvuraVbKVog0WMdY6trUg/exec?action=uploadImage \
-	--dart-define=GSHEETS_SUBMIT_URL=https://script.google.com/macros/s/AKfycbxKq50oJiSVKWOudPh1Do9leh0_MetObyu4s5xqK5sVRfmD-EvuraVbKVog0WMdY6trUg/exec?action=submitForm \
-	--dart-define=ADMIN_DATA_URL=https://script.google.com/macros/s/AKfycbxKq50oJiSVKWOudPh1Do9leh0_MetObyu4s5xqK5sVRfmD-EvuraVbKVog0WMdY6trUg/exec?action=adminData \
-	--dart-define=INSTALLER_TRACK_URL=https://script.google.com/macros/s/AKfycbxKq50oJiSVKWOudPh1Do9leh0_MetObyu4s5xqK5sVRfmD-EvuraVbKVog0WMdY6trUg/exec?action=trackInstallerLocation \
-	--dart-define=INSTALLER_LOGIN_URL=https://script.google.com/macros/s/AKfycbxKq50oJiSVKWOudPh1Do9leh0_MetObyu4s5xqK5sVRfmD-EvuraVbKVog0WMdY6trUg/exec?action=installerLogin
+	--dart-define=GDRIVE_UPLOAD_URL=https://script.google.com/macros/s/AKfycbz5vz21n_jp6JkCK1Wb8i7dgtCuGlKdwhPOZfxCuRrD6SiiAK9hyioUFs_gNdpvOnL95g/exec?action=uploadImage \
+	--dart-define=GSHEETS_SUBMIT_URL=https://script.google.com/macros/s/AKfycbz5vz21n_jp6JkCK1Wb8i7dgtCuGlKdwhPOZfxCuRrD6SiiAK9hyioUFs_gNdpvOnL95g/exec?action=submitForm \
+	--dart-define=ADMIN_DATA_URL=https://script.google.com/macros/s/AKfycbz5vz21n_jp6JkCK1Wb8i7dgtCuGlKdwhPOZfxCuRrD6SiiAK9hyioUFs_gNdpvOnL95g/exec?action=adminData \
+	--dart-define=INSTALLER_TRACK_URL=https://script.google.com/macros/s/AKfycbz5vz21n_jp6JkCK1Wb8i7dgtCuGlKdwhPOZfxCuRrD6SiiAK9hyioUFs_gNdpvOnL95g/exec?action=trackInstallerLocation \
+	--dart-define=INSTALLER_LOGIN_URL=https://script.google.com/macros/s/AKfycbz5vz21n_jp6JkCK1Wb8i7dgtCuGlKdwhPOZfxCuRrD6SiiAK9hyioUFs_gNdpvOnL95g/exec?action=installerLogin
 ```
 
 ## Deploy Admin Panel on Vercel (Live)

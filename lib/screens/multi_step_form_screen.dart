@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../models/admin_data.dart';
 import '../models/captured_image_data.dart';
 import '../models/installation_form_data.dart';
 import '../services/image_capture_service.dart';
@@ -13,7 +14,9 @@ import '../widgets/primary_action_button.dart';
 import '../widgets/step_card.dart';
 
 class MultiStepFormScreen extends StatefulWidget {
-  const MultiStepFormScreen({super.key});
+  const MultiStepFormScreen({super.key, this.initialSubmission});
+
+  final AdminSubmission? initialSubmission;
 
   @override
   State<MultiStepFormScreen> createState() => _MultiStepFormScreenState();
@@ -21,7 +24,12 @@ class MultiStepFormScreen extends StatefulWidget {
 
 class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     with WidgetsBindingObserver {
-  static const List<String> _brands = ['CAMEL', 'WINSTON', 'MIGHTY'];
+  static const List<String> _brands = [
+    'CAMEL',
+    'WINSTON',
+    'MIGHTY',
+    'MIGHTY RED',
+  ];
 
   static const List<String> _quantityOptions = [
     '0',
@@ -67,12 +75,19 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
   Map<String, Map<String, List<String>>> _branchMunicipalityBarangays =
       const <String, Map<String, List<String>>>{};
 
+  bool get _isEditMode => widget.initialSubmission != null;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (_isEditMode) {
+      _restoreSubmissionForEditing(widget.initialSubmission!);
+    }
     _loadLocationCatalog();
-    _restoreDraftIfAvailable();
+    if (!_isEditMode) {
+      _restoreDraftIfAvailable();
+    }
   }
 
   @override
@@ -309,6 +324,80 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     });
   }
 
+  void _restoreSubmissionForEditing(AdminSubmission submission) {
+    final restoredBrands = submission.brands
+        .split(',')
+        .map((item) => item.trim().toUpperCase())
+        .where((item) => item.isNotEmpty)
+        .toSet()
+        .toList();
+
+    final signageSelection =
+        _normalizeQuantitySelection(submission.signageQuantity);
+    final awningSelection =
+        _normalizeQuantitySelection(submission.awningQuantity);
+    final flangeSelection =
+        _normalizeQuantitySelection(submission.flangeQuantity);
+
+    _formData.branch =
+        submission.branch.trim().isEmpty ? null : submission.branch;
+    _formData.fullName =
+        submission.fullName.trim().isEmpty ? null : submission.fullName;
+    _formData.outletCode =
+        submission.outletCode.trim().isEmpty ? null : submission.outletCode;
+    _formData.signageName =
+        submission.signageName.trim().isEmpty ? null : submission.signageName;
+    _formData.storeOwnerName = submission.storeOwnerName.trim().isEmpty
+        ? null
+        : submission.storeOwnerName;
+    _formData.completeAddress = null;
+    _formData.purok = null;
+    _formData.barangay = null;
+    _formData.municipality = null;
+    _formData.beforeImage = null;
+    _formData.afterImage = null;
+    _formData.completionImage = null;
+    _formData.signageQuantity = signageSelection.selection;
+    _formData.signageQuantityOther = signageSelection.otherValue;
+    _formData.awningQuantity = awningSelection.selection;
+    _formData.awningQuantityOther = awningSelection.otherValue;
+    _formData.flangeQuantity = flangeSelection.selection;
+    _formData.flangeQuantityOther = flangeSelection.otherValue;
+    _formData.brands
+      ..clear()
+      ..addAll(restoredBrands);
+
+    _fullNameController.text = _formData.fullName ?? '';
+    _outletCodeController.text = _formData.outletCode ?? '';
+    _signageNameController.text = _formData.signageName ?? '';
+    _storeOwnerController.text = _formData.storeOwnerName ?? '';
+    _purokController.clear();
+    _signageOtherController.text = _formData.signageQuantityOther ?? '';
+    _awningOtherController.text = _formData.awningQuantityOther ?? '';
+    _flangeOtherController.text = _formData.flangeQuantityOther ?? '';
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _showError(
+        'Editing previous submission. Review details and reupload all photos before saving.',
+      );
+    });
+  }
+
+  _QuantitySelection _normalizeQuantitySelection(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return const _QuantitySelection(selection: null, otherValue: null);
+    }
+
+    final upper = trimmed.toUpperCase();
+    if (_quantityOptions.contains(upper)) {
+      return _QuantitySelection(selection: upper, otherValue: null);
+    }
+
+    return _QuantitySelection(selection: 'OTHERS', otherValue: trimmed);
+  }
+
   Future<void> _goNext() async {
     if (!_validateCurrentStep()) return;
 
@@ -517,7 +606,29 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
           'completionImageDriveUrl': completionUrl,
         });
 
-      await _uploadService.submitToGoogleSheets(payload);
+      if (_isEditMode) {
+        final initialSubmission = widget.initialSubmission;
+        final rowNumber = initialSubmission?.rowNumber;
+        if (initialSubmission == null || rowNumber == null || rowNumber <= 1) {
+          throw Exception(
+            'Unable to update this submission. Missing row reference.',
+          );
+        }
+
+        await _uploadService.updateGoogleSheetsEntry(
+          payload: payload,
+          branch: initialSubmission.branch,
+          rowNumber: rowNumber,
+          originalTimestamp: initialSubmission.scriptTimestamp.trim().isNotEmpty
+              ? initialSubmission.scriptTimestamp
+              : initialSubmission.timestamp,
+          originalOutletCode: initialSubmission.outletCode,
+          originalInstallerName: initialSubmission.fullName,
+        );
+      } else {
+        await _uploadService.submitToGoogleSheets(payload);
+      }
+
       await _localStorageService.clearDraft();
 
       if (!mounted) return;
@@ -526,7 +637,11 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
         builder: (context) {
           return AlertDialog(
             title: const Text('Success'),
-            content: const Text('Form submitted successfully.'),
+            content: Text(
+              _isEditMode
+                  ? 'Submission updated successfully.'
+                  : 'Form submitted successfully.',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
@@ -536,6 +651,13 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
           );
         },
       );
+
+      if (!mounted) return;
+
+      if (_isEditMode) {
+        Navigator.of(context).pop(true);
+        return;
+      }
 
       await _resetFormToFirstStep();
     } catch (e) {
@@ -655,7 +777,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
                   ),
                 )
                 .toList(),
-            onChanged: _branches.isEmpty
+            onChanged: _branches.isEmpty || _isEditMode
                 ? null
                 : (value) {
                     setState(() {
@@ -686,6 +808,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     required TextEditingController controller,
     required String buttonLabel,
     int maxLines = 1,
+    bool enabled = true,
   }) {
     return StepCard(
       title: title,
@@ -694,6 +817,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
           TextField(
             controller: controller,
             maxLines: maxLines,
+            enabled: enabled,
             decoration: InputDecoration(
               hintText: 'Enter $title',
               border: OutlineInputBorder(
@@ -1137,8 +1261,10 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
                             ),
                             const SizedBox(height: 16),
                             PrimaryActionButton(
-                              label: 'SUBMIT FORM',
-                              onPressed: _submit,
+                              label: _isEditMode
+                                  ? 'UPDATE & REUPLOAD'
+                                  : 'SUBMIT FORM',
+                              onPressed: _isSubmitting ? null : _submit,
                               isLoading: _isSubmitting,
                             ),
                           ],
@@ -1154,4 +1280,14 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
       ),
     );
   }
+}
+
+class _QuantitySelection {
+  const _QuantitySelection({
+    required this.selection,
+    required this.otherValue,
+  });
+
+  final String? selection;
+  final String? otherValue;
 }

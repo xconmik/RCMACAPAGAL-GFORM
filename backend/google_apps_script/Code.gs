@@ -55,6 +55,16 @@ const INSTALLER_TRACKING_HEADERS = [
   'SOURCE',
 ];
 
+const DAILY_REPORT_HEADERS = [
+  'DATE',
+  'INSTALLER NAME',
+  'BRAND',
+  'Quantity of Signage',
+  'Quantity of Awnings',
+  'Quantity of Flange',
+  'Summary of daily TOTAL INSTALLED',
+];
+
 const INSTALLER_ACCOUNTS_HEADERS = [
   'installerId',
   'pin',
@@ -62,6 +72,30 @@ const INSTALLER_ACCOUNTS_HEADERS = [
   'branch',
   'role',
   'active',
+];
+
+const INSTALLATIONS_BACKUP_HEADERS = [
+  'ARCHIVED_AT',
+  'ACTION',
+  'SOURCE_SHEET',
+  'SOURCE_ROW',
+  'TIMESTAMP',
+  'BRANCH',
+  'OUTLET_CODE',
+  'INSTALLERS_NAME',
+  'STORE_NAME',
+  'STORE_OWNER_NAME',
+  'PUROK',
+  'BARANGAY',
+  'MUNICIPALITY',
+  'BRAND',
+  'SIGNAGE_QUANTITY',
+  'AWNING_QUANTITY',
+  'FLANGE_QUANTITY',
+  'BEFORE(GPS)',
+  'AFTER(GPS)',
+  'COMPLETION_FORM',
+  'RAW_JSON',
 ];
 
 function doPost(e) {
@@ -94,9 +128,13 @@ function doPost(e) {
       return _handleDeleteEntry(e);
     }
 
+    if (action === 'updateEntry') {
+      return _handleUpdateEntry(e);
+    }
+
     return _jsonResponse({
       success: false,
-      error: 'Unknown action. Use uploadImage, submitForm, installerLogin, trackInstallerLocation, or deleteEntry.',
+      error: 'Unknown action. Use uploadImage, submitForm, installerLogin, trackInstallerLocation, deleteEntry, or updateEntry.',
     }, 400);
   } catch (error) {
     return _jsonResponse({ success: false, error: String(error) }, 500);
@@ -304,7 +342,15 @@ function _handleDeleteEntry(e) {
     throw new Error('Row number does not exist.');
   }
 
+  const archivedRows = [
+    {
+      rowNumber: rowNumber,
+      values: sheet.getRange(rowNumber, 1, 1, SHEET_HEADERS_V2.length).getValues()[0],
+    },
+  ];
+  _archiveInstallationRows(spreadsheet, sheet.getName(), archivedRows, 'delete_entry');
   sheet.deleteRow(rowNumber);
+  _syncDailyReportSheet(spreadsheet);
 
   return _jsonResponse({
     success: true,
@@ -451,30 +497,11 @@ function _handleSubmitForm(e) {
 
   _ensureSheetStructureV2(sheet);
   const timestamp = _nowTimestamp();
-  const brandTokens = _splitBrands(payload.brands);
-  const safeBrands = brandTokens.length > 0 ? brandTokens : [''];
-
-  const rows = safeBrands.map((brand) => [
-    timestamp,
-    _string(payload.branch),
-    _string(payload.outletCode),
-    _string(payload.fullName),
-    _string(payload.signageName),
-    _string(payload.storeOwnerName),
-    _string(payload.purok),
-    _string(payload.barangay),
-    _string(payload.municipality),
-    brand,
-    _string(payload.signageQuantity),
-    _string(payload.awningQuantity),
-    _string(payload.flangeQuantity),
-    _nested(payload.beforeImageDriveUrl),
-    _nested(payload.afterImageDriveUrl),
-    _nested(payload.completionImageDriveUrl),
-  ]);
+  const rows = _buildInstallationRows(payload, timestamp);
 
   const startRow = sheet.getLastRow() + 1;
   sheet.getRange(startRow, 1, rows.length, SHEET_HEADERS_V2.length).setValues(rows);
+  _syncDailyReportSheet(spreadsheet);
 
   return _jsonResponse({
     success: true,
@@ -482,6 +509,66 @@ function _handleSubmitForm(e) {
     rowsInserted: rows.length,
     branch: branchName,
     spreadsheetId: spreadsheetId,
+    scriptTimestamp: _nowTimestamp(),
+  }, 200);
+}
+
+function _handleUpdateEntry(e) {
+  const request = _parseJsonBody(e);
+  const branchName = _string(request.branch).trim();
+  const rowNumber = _toInt(request.rowNumber, -1);
+  const payload = request.payload && typeof request.payload === 'object'
+    ? request.payload
+    : request;
+
+  if (!branchName) {
+    throw new Error('Missing required field: branch');
+  }
+
+  if (!payload.branch || !payload.outletCode) {
+    throw new Error('Invalid payload. Required fields missing (branch, outletCode).');
+  }
+
+  const spreadsheetId = _resolveSpreadsheetIdForBranch(branchName);
+  const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+  const sheet = _getOrCreateSheet(spreadsheet, CONFIG.SHEET_NAME);
+  _ensureSheetStructureV2(sheet);
+
+  const matchingRows = _findMatchingSubmissionRows(sheet, {
+    rowNumber: rowNumber,
+    originalTimestamp: _string(request.originalTimestamp),
+    originalOutletCode: _string(request.originalOutletCode),
+    originalInstallerName: _string(request.originalInstallerName),
+  });
+
+  if (matchingRows.length === 0) {
+    throw new Error('Unable to locate the original submission rows for update.');
+  }
+
+  const insertAt = Math.min.apply(null, matchingRows);
+  const archivedRows = matchingRows.map((targetRow) => ({
+    rowNumber: targetRow,
+    values: sheet.getRange(targetRow, 1, 1, SHEET_HEADERS_V2.length).getValues()[0],
+  }));
+  _archiveInstallationRows(spreadsheet, sheet.getName(), archivedRows, 'update_entry_before_replace');
+  matchingRows
+    .slice()
+    .sort((a, b) => b - a)
+    .forEach((targetRow) => sheet.deleteRow(targetRow));
+
+  const timestamp = _nowTimestamp();
+  const rows = _buildInstallationRows(payload, timestamp);
+
+  sheet.insertRowsBefore(insertAt, rows.length);
+  sheet.getRange(insertAt, 1, rows.length, SHEET_HEADERS_V2.length).setValues(rows);
+  _syncDailyReportSheet(spreadsheet);
+
+  return _jsonResponse({
+    success: true,
+    message: 'Entry updated.',
+    branch: branchName,
+    rowNumber: rowNumber,
+    rowsInserted: rows.length,
     scriptTimestamp: _nowTimestamp(),
   }, 200);
 }
@@ -687,93 +774,8 @@ function _ensureSheetStructureV2(sheet) {
     sheet.appendRow(SHEET_HEADERS_V2);
     return;
   }
-
-  _removeSubmittedAtColumnIfPresent(sheet);
-
-  const lastColumn = Math.max(sheet.getLastColumn(), 1);
-  const headerRow = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
-  const normalizedHeaders = headerRow.map((item) => _normalizeHeader(item));
-
-  const hasSplitLocation =
-    normalizedHeaders.indexOf('purok') >= 0 &&
-    normalizedHeaders.indexOf('barangay') >= 0 &&
-    normalizedHeaders.indexOf('municipality') >= 0;
-
-  if (hasSplitLocation) {
-    _ensureColumnCount(sheet, SHEET_HEADERS_V2.length);
-    sheet.getRange(1, 1, 1, SHEET_HEADERS_V2.length).setValues([SHEET_HEADERS_V2]);
-    return;
-  }
-
-  const dataRowCount = Math.max(sheet.getLastRow() - 1, 0);
-  const values = dataRowCount > 0
-    ? sheet.getRange(2, 1, dataRowCount, lastColumn).getValues()
-    : [];
-
-  const migrated = values.map((row) => {
-    const completeAddress = _valueByHeader(row, normalizedHeaders, 'completeaddress');
-    const purok = _extractPurok(completeAddress);
-    const barangay = _extractBarangay(completeAddress);
-    const municipality = _extractMunicipality(completeAddress);
-
-    return [
-      _valueByHeader(row, normalizedHeaders, 'timestamp'),
-      _valueByHeader(row, normalizedHeaders, 'branch'),
-      _valueByHeader(row, normalizedHeaders, 'outletcode'),
-      _valueByHeader(row, normalizedHeaders, ['fullname', 'installersname']),
-      _valueByHeader(row, normalizedHeaders, ['signagename', 'storename']),
-      _valueByHeader(row, normalizedHeaders, 'storeownername'),
-      purok,
-      barangay,
-      municipality,
-      _valueByHeader(row, normalizedHeaders, ['brands', 'brand']),
-      _valueByHeader(row, normalizedHeaders, 'signagequantity'),
-      _valueByHeader(row, normalizedHeaders, 'awningquantity'),
-      _valueByHeader(row, normalizedHeaders, 'flangequantity'),
-      _valueByHeader(row, normalizedHeaders, ['beforeimagedriveurl', 'beforegps']),
-      _valueByHeader(row, normalizedHeaders, ['afterimagedriveurl', 'aftergps']),
-      _valueByHeader(row, normalizedHeaders, ['completionimagedriveurl', 'completionform']),
-    ];
-  });
-
   _ensureColumnCount(sheet, SHEET_HEADERS_V2.length);
   sheet.getRange(1, 1, 1, SHEET_HEADERS_V2.length).setValues([SHEET_HEADERS_V2]);
-
-  if (migrated.length > 0) {
-    sheet.getRange(2, 1, migrated.length, SHEET_HEADERS_V2.length).setValues(migrated);
-  }
-
-  _normalizeBrandRows(sheet);
-}
-
-function _normalizeBrandRows(sheet) {
-  const rowCount = Math.max(sheet.getLastRow() - 1, 0);
-  if (rowCount <= 0) return;
-
-  const values = sheet.getRange(2, 1, rowCount, SHEET_HEADERS_V2.length).getValues();
-  const brandColumnIndex = 9;
-  let changed = false;
-  const expanded = [];
-
-  values.forEach((row) => {
-    const brands = _splitBrands(row[brandColumnIndex]);
-    if (brands.length <= 1) {
-      expanded.push(row);
-      return;
-    }
-
-    changed = true;
-    brands.forEach((brand) => {
-      const newRow = row.slice();
-      newRow[brandColumnIndex] = brand;
-      expanded.push(newRow);
-    });
-  });
-
-  if (!changed) return;
-
-  sheet.getRange(2, 1, rowCount, SHEET_HEADERS_V2.length).clearContent();
-  sheet.getRange(2, 1, expanded.length, SHEET_HEADERS_V2.length).setValues(expanded);
 }
 
 function _ensureColumnCount(sheet, requiredColumns) {
@@ -937,6 +939,246 @@ function _nested(obj, key) {
   if (!obj || typeof obj !== 'object') return '';
   const value = obj[key];
   return value === undefined || value === null ? '' : String(value);
+}
+
+function createHistoricalBackupSnapshot() {
+  const timestamp = Utilities.formatDate(
+    new Date(),
+    Session.getScriptTimeZone(),
+    'yyyyMMdd_HHmmss'
+  );
+
+  Object.keys(CONFIG.BRANCH_SHEET_IDS || {}).forEach((branchName) => {
+    const spreadsheetId = _resolveSpreadsheetIdForBranch(branchName);
+    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+    const sourceSheet = _getOrCreateSheet(spreadsheet, CONFIG.SHEET_NAME);
+    const backupSheetName = 'Installations_Snapshot_' + timestamp;
+    const existing = spreadsheet.getSheetByName(backupSheetName);
+    const backupSheet = existing || spreadsheet.insertSheet(backupSheetName);
+
+    const lastRow = sourceSheet.getLastRow();
+    const lastColumn = Math.max(sourceSheet.getLastColumn(), SHEET_HEADERS_V2.length);
+    if (lastRow <= 0) {
+      backupSheet.getRange(1, 1, 1, SHEET_HEADERS_V2.length).setValues([SHEET_HEADERS_V2]);
+      return;
+    }
+
+    const values = sourceSheet.getRange(1, 1, lastRow, lastColumn).getValues();
+    _ensureColumnCount(backupSheet, Math.max(lastColumn, SHEET_HEADERS_V2.length));
+    backupSheet.getRange(1, 1, values.length, values[0].length).setValues(values);
+  });
+}
+
+function _buildInstallationRows(payload, timestamp) {
+  const brandTokens = _splitBrands(payload.brands);
+  const safeBrands = brandTokens.length > 0 ? brandTokens : [''];
+
+  return safeBrands.map((brand) => [
+    timestamp,
+    _string(payload.branch),
+    _string(payload.outletCode),
+    _string(payload.fullName),
+    _string(payload.signageName),
+    _string(payload.storeOwnerName),
+    _string(payload.purok),
+    _string(payload.barangay),
+    _string(payload.municipality),
+    brand,
+    _resolvedQuantityValue(payload.signageQuantity, payload.signageQuantityOther),
+    _resolvedQuantityValue(payload.awningQuantity, payload.awningQuantityOther),
+    _resolvedQuantityValue(payload.flangeQuantity, payload.flangeQuantityOther),
+    _nested(payload.beforeImageDriveUrl),
+    _nested(payload.afterImageDriveUrl),
+    _nested(payload.completionImageDriveUrl),
+  ]);
+}
+
+function _resolvedQuantityValue(value, otherValue) {
+  const text = _string(value).trim();
+  if (text.toUpperCase() !== 'OTHERS') return text;
+
+  const other = _string(otherValue).trim();
+  return other || text;
+}
+
+function _findMatchingSubmissionRows(sheet, criteria) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return [];
+
+  const values = sheet.getRange(2, 1, lastRow - 1, SHEET_HEADERS_V2.length).getValues();
+  const originalTimestamp = _normalizeTimestamp(criteria.originalTimestamp);
+  const originalOutletCode = _string(criteria.originalOutletCode).trim();
+  const originalInstallerName = _string(criteria.originalInstallerName).trim();
+  const matches = [];
+
+  values.forEach((row, index) => {
+    const actualRow = index + 2;
+    const rowTimestamp = _normalizeTimestamp(row[0]);
+    const rowOutletCode = _string(row[2]).trim();
+    const rowInstallerName = _string(row[3]).trim();
+
+    const matchesGroupedSubmission =
+      originalTimestamp &&
+      originalOutletCode &&
+      originalInstallerName &&
+      rowTimestamp === originalTimestamp &&
+      rowOutletCode === originalOutletCode &&
+      rowInstallerName === originalInstallerName;
+
+    if (matchesGroupedSubmission || actualRow === criteria.rowNumber) {
+      matches.push(actualRow);
+    }
+  });
+
+  return Array.from(new Set(matches));
+}
+
+function _syncDailyReportSheet(spreadsheet) {
+  const sourceSheet = _getOrCreateSheet(spreadsheet, CONFIG.SHEET_NAME);
+  _ensureSheetStructureV2(sourceSheet);
+
+  const dailySheet = _getOrCreateSheet(spreadsheet, 'Daily Report');
+  _ensureColumnCount(dailySheet, DAILY_REPORT_HEADERS.length);
+  dailySheet.getRange(1, 1, 1, DAILY_REPORT_HEADERS.length).setValues([DAILY_REPORT_HEADERS]);
+
+  const sourceRowCount = Math.max(sourceSheet.getLastRow() - 1, 0);
+  const existingDailyRowCount = Math.max(dailySheet.getLastRow() - 1, 0);
+
+  if (existingDailyRowCount > 0) {
+    dailySheet.getRange(2, 1, existingDailyRowCount, DAILY_REPORT_HEADERS.length).clearContent();
+  }
+
+  if (sourceRowCount <= 0) return;
+
+  const values = sourceSheet.getRange(2, 1, sourceRowCount, SHEET_HEADERS_V2.length).getValues();
+  const rows = _buildDailyReportRows(values);
+  if (rows.length <= 0) return;
+
+  dailySheet.getRange(2, 1, rows.length, DAILY_REPORT_HEADERS.length).setValues(rows);
+}
+
+function _buildDailyReportRows(values) {
+  const grouped = {};
+
+  values.forEach((row) => {
+    const dateKey = _dailyReportDateKey(row[0]);
+    const installerName = _string(row[3]).trim();
+    const brand = _string(row[9]).trim();
+    if (!dateKey || !installerName || !brand) return;
+
+    const key = [dateKey, installerName.toUpperCase(), brand.toUpperCase()].join('|');
+    if (!grouped[key]) {
+      grouped[key] = {
+        dateKey: dateKey,
+        installerName: installerName,
+        brand: brand,
+        signage: 0,
+        awning: 0,
+        flange: 0,
+      };
+    }
+
+    grouped[key].signage += _toInt(row[10], 0);
+    grouped[key].awning += _toInt(row[11], 0);
+    grouped[key].flange += _toInt(row[12], 0);
+  });
+
+  return Object.keys(grouped)
+    .map((key) => {
+      const item = grouped[key];
+      return [
+        item.dateKey,
+        item.installerName,
+        item.brand,
+        item.signage,
+        item.awning,
+        item.flange,
+        item.signage + item.awning + item.flange,
+      ];
+    })
+    .sort((a, b) => {
+      if (a[0] !== b[0]) {
+        return a[0] < b[0] ? 1 : -1;
+      }
+
+      if (a[1] !== b[1]) {
+        return a[1] < b[1] ? -1 : 1;
+      }
+
+      if (a[2] !== b[2]) {
+        return a[2] < b[2] ? -1 : 1;
+      }
+
+      return 0;
+    });
+}
+
+function _dailyReportDateKey(value) {
+  const normalized = _normalizeTimestamp(value);
+  if (!normalized) return '';
+
+  const parsed = new Date(normalized);
+  if (isNaN(parsed.getTime())) {
+    return normalized.slice(0, 10);
+  }
+
+  return Utilities.formatDate(parsed, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+function _archiveInstallationRows(spreadsheet, sourceSheetName, rows, action) {
+  if (!rows || rows.length <= 0) return;
+
+  const backupSheet = _getOrCreateSheet(spreadsheet, 'Installations_Backup_Log');
+  _ensureColumnCount(backupSheet, INSTALLATIONS_BACKUP_HEADERS.length);
+
+  if (backupSheet.getLastRow() <= 0) {
+    backupSheet.appendRow(INSTALLATIONS_BACKUP_HEADERS);
+  } else {
+    backupSheet
+      .getRange(1, 1, 1, INSTALLATIONS_BACKUP_HEADERS.length)
+      .setValues([INSTALLATIONS_BACKUP_HEADERS]);
+  }
+
+  const archivedAt = _nowTimestamp();
+  const payload = rows.map((item) => {
+    const values = _expandRowToHeaderLength(item.values, SHEET_HEADERS_V2.length);
+    return [
+      archivedAt,
+      action,
+      sourceSheetName,
+      item.rowNumber,
+      values[0],
+      values[1],
+      values[2],
+      values[3],
+      values[4],
+      values[5],
+      values[6],
+      values[7],
+      values[8],
+      values[9],
+      values[10],
+      values[11],
+      values[12],
+      values[13],
+      values[14],
+      values[15],
+      JSON.stringify(values),
+    ];
+  });
+
+  const startRow = backupSheet.getLastRow() + 1;
+  backupSheet
+    .getRange(startRow, 1, payload.length, INSTALLATIONS_BACKUP_HEADERS.length)
+    .setValues(payload);
+}
+
+function _expandRowToHeaderLength(row, targetLength) {
+  const values = Array.isArray(row) ? row.slice(0, targetLength) : [];
+  while (values.length < targetLength) {
+    values.push('');
+  }
+  return values;
 }
 
 function _jsonResponse(payload, statusCode) {

@@ -36,7 +36,7 @@ class UploadService {
 
     final streamedResponse = await request.send().timeout(_uploadTimeout);
     final response = await http.Response.fromStream(streamedResponse)
-      .timeout(_uploadTimeout);
+        .timeout(_uploadTimeout);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(
@@ -46,7 +46,8 @@ class UploadService {
 
     final decoded = _tryDecodeJson(response.body);
     if (decoded is Map<String, dynamic>) {
-      final fileUrl = decoded['fileUrl'] ?? decoded['url'] ?? decoded['driveUrl'];
+      final fileUrl =
+          decoded['fileUrl'] ?? decoded['url'] ?? decoded['driveUrl'];
       if (fileUrl is String && fileUrl.trim().isNotEmpty) {
         return _normalizeDriveImageUrl(fileUrl);
       }
@@ -95,7 +96,8 @@ class UploadService {
         );
       }
 
-      final fileUrl = decoded['fileUrl'] ?? decoded['url'] ?? decoded['driveUrl'];
+      final fileUrl =
+          decoded['fileUrl'] ?? decoded['url'] ?? decoded['driveUrl'];
       if (fileUrl is String && fileUrl.trim().isNotEmpty) {
         return _normalizeDriveImageUrl(fileUrl);
       }
@@ -133,6 +135,48 @@ class UploadService {
     }
   }
 
+  Future<void> updateGoogleSheetsEntry({
+    required Map<String, dynamic> payload,
+    required String branch,
+    required int rowNumber,
+    required String originalTimestamp,
+    required String originalOutletCode,
+    required String originalInstallerName,
+  }) async {
+    if (payload.isEmpty) {
+      throw Exception('Invalid payload.');
+    }
+
+    final endpoint = ApiEndpoints.updateEntryUrl;
+    if (endpoint.trim().isEmpty) {
+      throw Exception('Update endpoint is not configured.');
+    }
+
+    final response = await _postJson(
+      Uri.parse(endpoint),
+      {
+        'branch': branch,
+        'rowNumber': rowNumber,
+        'originalTimestamp': originalTimestamp,
+        'originalOutletCode': originalOutletCode,
+        'originalInstallerName': originalInstallerName,
+        'payload': payload,
+      },
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Google Sheets update failed (${response.statusCode}): ${response.body}',
+      );
+    }
+
+    final decoded = _tryDecodeJson(response.body);
+    if (decoded is Map<String, dynamic> && decoded['success'] == false) {
+      throw Exception(
+          decoded['error']?.toString() ?? 'Failed to update entry.');
+    }
+  }
+
   Future<http.Response> _postJson(
     Uri uri,
     Map<String, dynamic> payload,
@@ -158,7 +202,8 @@ class UploadService {
 
       return response;
     } on TimeoutException {
-      throw Exception('Request timed out. Please check internet connection and try again.');
+      throw Exception(
+          'Request timed out. Please check internet connection and try again.');
     }
   }
 
@@ -196,7 +241,8 @@ class UploadService {
     if (uri == null) return '';
 
     final host = uri.host.toLowerCase();
-    if (!host.contains('drive.google.com') && !host.contains('docs.google.com')) {
+    if (!host.contains('drive.google.com') &&
+        !host.contains('docs.google.com')) {
       return '';
     }
 

@@ -1,6 +1,6 @@
 class ApiEndpoints {
   static const String _defaultWebAppUrl =
-  'https://script.google.com/macros/s/AKfycbywnS_4imOUpBl4WXbqzF2BAh_IfAII7o3chA8v1Qx2J00Be5Lc0alaF8r7cBSfEA5SEw/exec';
+      'https://script.google.com/macros/s/AKfycbz5vz21n_jp6JkCK1Wb8i7dgtCuGlKdwhPOZfxCuRrD6SiiAK9hyioUFs_gNdpvOnL95g/exec';
 
   static const String _googleDriveUploadUrlEnv = String.fromEnvironment(
     'GDRIVE_UPLOAD_URL',
@@ -50,7 +50,9 @@ class ApiEndpoints {
 
   static String get installerTrackingUrl {
     final override = _installerTrackingUrlEnv.trim();
-    if (override.isNotEmpty) return _withAction(override, 'trackInstallerLocation');
+    if (override.isNotEmpty) {
+      return _withAction(override, 'trackInstallerLocation');
+    }
 
     final submitEnv = _googleSheetsSubmitUrlEnv.trim();
     if (submitEnv.isNotEmpty) {
@@ -75,7 +77,8 @@ class ApiEndpoints {
     return _withAction(_defaultWebAppUrl, 'installerLogin');
   }
 
-  static bool get hasInstallerLoginEndpoint => installerLoginUrl.trim().isNotEmpty;
+  static bool get hasInstallerLoginEndpoint =>
+      installerLoginUrl.trim().isNotEmpty;
 
   static bool get useAppsScriptJsonMode =>
       googleDriveUploadMode.trim().toLowerCase() == 'apps_script';
@@ -105,6 +108,24 @@ class ApiEndpoints {
     if (adminUri == null) return '';
 
     return _withAction(adminUri.toString(), 'deleteEntry');
+  }
+
+  static String get updateEntryUrl {
+    final submitUrl = googleSheetsSubmitUrl.trim();
+    if (submitUrl.isNotEmpty) {
+      final submitUri = Uri.tryParse(submitUrl);
+      if (submitUri != null) {
+        return _withAction(submitUri.toString(), 'updateEntry');
+      }
+    }
+
+    final adminUrl = adminDataUrl.trim();
+    if (adminUrl.isEmpty) return '';
+
+    final adminUri = Uri.tryParse(adminUrl);
+    if (adminUri == null) return '';
+
+    return _withAction(adminUri.toString(), 'updateEntry');
   }
 
   static String _withAction(String url, String action) {

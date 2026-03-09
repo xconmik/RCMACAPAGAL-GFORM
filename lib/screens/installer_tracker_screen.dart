@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
+import 'installer_history_screen.dart';
 import '../services/installer_auth_service.dart';
 import '../services/installer_tracking_service.dart';
 import '../services/local_storage_service.dart';
@@ -82,7 +83,8 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
     });
 
     try {
-      final profile = await _authService.login(installerId: installerId, pin: pin);
+      final profile =
+          await _authService.login(installerId: installerId, pin: pin);
       await _localStorageService.saveInstallerSession(profile.toJson());
 
       if (!mounted) return;
@@ -234,7 +236,8 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
 
       if (!mounted) return;
       setState(() {
-        _status = 'Location sent at ${TimeOfDay.fromDateTime(now).format(context)}';
+        _status =
+            'Location sent at ${TimeOfDay.fromDateTime(now).format(context)}';
       });
     } catch (e) {
       if (!mounted) return;
@@ -303,7 +306,21 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
                 const SizedBox(height: 10),
                 FilledButton(
                   onPressed: _isTracking ? _stopTracking : _startTracking,
-                  child: Text(_isTracking ? 'Stop Shift Tracking' : 'Start Shift Tracking'),
+                  child: Text(_isTracking
+                      ? 'Stop Shift Tracking'
+                      : 'Start Shift Tracking'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            InstallerHistoryScreen(profile: profile),
+                      ),
+                    );
+                  },
+                  child: const Text('Submission History / Edit'),
                 ),
                 const SizedBox(height: 8),
                 OutlinedButton(

@@ -41,6 +41,22 @@ Example mapping:
 5. Deploy and authorize requested scopes (Drive + Sheets).
 6. Copy the Web App URL (example: `https://script.google.com/macros/s/AKfycb.../exec`).
 
+## 3.5) Protect Existing Encoded Data Before Updating
+
+Before deploying the updated script version, run this one-time helper in the Apps Script editor:
+
+- Function name: `createHistoricalBackupSnapshot`
+
+What it does:
+
+- Creates an `Installations_Snapshot_YYYYMMDD_HHMMSS` tab in each branch spreadsheet
+- Copies the full current `Installations` sheet as-is before the new version is used
+
+Additional safety in the new script version:
+
+- Any `deleteEntry` or `updateEntry` action now archives affected rows into `Installations_Backup_Log`
+- Existing historical `Installations` rows are no longer auto-rewritten during normal reads/submits; they stay in place and the script only standardizes the header row for new writes
+
 ## 4) Configure Flutter Run
 
 Use the same base URL with different `action` query params:
