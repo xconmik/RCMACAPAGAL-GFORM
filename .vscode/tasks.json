@@ -1,0 +1,12 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Flutter setup build",
+			"type": "shell",
+			"command": "flutter pub get; flutter build apk --release; flutter build web --release",
+			"isBackground": false,
+			"group": "build"
+		}
+	]
+}
