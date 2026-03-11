@@ -1840,6 +1840,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   }
 
   Widget _buildInstallerMapCard(List<AdminTrackingLocation> points) {
+    const mapHeight = kIsWeb ? 520.0 : 420.0;
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1875,7 +1877,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               )
             else ...[
               SizedBox(
-                height: 360,
+                height: mapHeight,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(10),
                   child: _buildMapWidget(points),
