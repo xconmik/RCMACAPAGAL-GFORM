@@ -20,23 +20,28 @@ class InstallerLiveTrackingService {
   static Future<void> initialize() async {
     if (kIsWeb || _initialized) return;
 
-    await _service.configure(
-      androidConfiguration: AndroidConfiguration(
-        onStart: _onStart,
-        autoStart: false,
-        autoStartOnBoot: false,
-        isForegroundMode: true,
-        foregroundServiceNotificationId: 9001,
-        initialNotificationTitle: 'Installer tracking active',
-        initialNotificationContent: 'Preparing location updates',
-      ),
-      iosConfiguration: IosConfiguration(
-        autoStart: false,
-        onForeground: _onStart,
-      ),
-    );
+    try {
+      await _service.configure(
+        androidConfiguration: AndroidConfiguration(
+          onStart: _onStart,
+          autoStart: false,
+          autoStartOnBoot: false,
+          isForegroundMode: true,
+          foregroundServiceNotificationId: 9001,
+          initialNotificationTitle: 'Installer tracking active',
+          initialNotificationContent: 'Preparing location updates',
+        ),
+        iosConfiguration: IosConfiguration(
+          autoStart: false,
+          onForeground: _onStart,
+        ),
+      );
 
-    _initialized = true;
+      _initialized = true;
+    } catch (error, stackTrace) {
+      debugPrint('InstallerLiveTrackingService.initialize failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   static Future<bool> ensureLocationPermission() async {
@@ -56,6 +61,7 @@ class InstallerLiveTrackingService {
     if (kIsWeb || profile.branch.trim().isEmpty || profile.isGuest) return;
 
     await initialize();
+    if (!_initialized) return;
 
     final prefs = await SharedPreferences.getInstance();
     final trackingSession = <String, dynamic>{
@@ -72,11 +78,18 @@ class InstallerLiveTrackingService {
     );
     await prefs.setBool(LocalStorageService.trackingActiveKey, true);
 
-    final isRunning = await _service.isRunning();
-    if (isRunning) {
-      _service.invoke('refreshTracking', trackingSession);
-    } else {
-      await _service.startService();
+    try {
+      final isRunning = await _service.isRunning();
+      if (isRunning) {
+        _service.invoke('refreshTracking', trackingSession);
+      } else {
+        await _service.startService();
+      }
+    } catch (error, stackTrace) {
+      await prefs.setBool(LocalStorageService.trackingActiveKey, false);
+      debugPrint(
+          'InstallerLiveTrackingService.startTrackingForProfile failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
     }
   }
 
@@ -87,7 +100,15 @@ class InstallerLiveTrackingService {
     await prefs.setBool(LocalStorageService.trackingActiveKey, false);
     await prefs.remove(LocalStorageService.trackingSessionKey);
     await prefs.remove(LocalStorageService.trackingSnapshotKey);
-    _service.invoke('stopTracking');
+
+    if (!_initialized) return;
+
+    try {
+      _service.invoke('stopTracking');
+    } catch (error, stackTrace) {
+      debugPrint('InstallerLiveTrackingService.stopTracking failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   static Future<bool> isTrackingActive() async {

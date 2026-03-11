@@ -1,12 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'services/installer_live_tracking_service.dart';
 import 'screens/admin_panel_screen.dart';
 import 'screens/installer_login_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await InstallerLiveTrackingService.initialize();
   runApp(const RcMacapagalGformApp());
 }
 

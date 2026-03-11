@@ -38,9 +38,6 @@ class _InstallerDashboardScreenState extends State<InstallerDashboardScreen> {
     super.initState();
     _profile = widget.profile;
     _syncTrackingState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _ensureAutoTracking();
-    });
   }
 
   bool get _hasActiveBranch => _profile.branch.trim().isNotEmpty;
@@ -56,7 +53,7 @@ class _InstallerDashboardScreenState extends State<InstallerDashboardScreen> {
       _profile = updatedProfile;
     });
 
-    await _ensureAutoTracking();
+    await _syncTrackingState();
   }
 
   Future<void> _syncTrackingState() async {
@@ -64,49 +61,17 @@ class _InstallerDashboardScreenState extends State<InstallerDashboardScreen> {
     if (!mounted) return;
     setState(() {
       _isTrackingActive = active;
-    });
-  }
-
-  Future<void> _ensureAutoTracking() async {
-    if (!_hasActiveBranch) {
-      if (!mounted) return;
-      setState(() {
+      if (!_hasActiveBranch) {
         _trackingHint =
-            'Select an active branch to enable the form, history, and live tracking.';
-        _isTrackingActive = false;
-      });
-      return;
-    }
-
-    if (_profile.isGuest) {
-      if (!mounted) return;
-      setState(() {
+            'Select an active branch to enable the form, history, and GPS tracker.';
+      } else if (_profile.isGuest) {
         _trackingHint =
             'Guest Mode can use the form and history, but live tracking stays off.';
-        _isTrackingActive = false;
-      });
-      return;
-    }
-
-    final granted =
-        await InstallerLiveTrackingService.ensureLocationPermission();
-    if (!mounted) return;
-
-    if (!granted) {
-      setState(() {
-        _trackingHint =
-            'Allow location permission so live tracking starts automatically.';
-        _isTrackingActive = false;
-      });
-      return;
-    }
-
-    await InstallerLiveTrackingService.startTrackingForProfile(_profile);
-    if (!mounted) return;
-
-    setState(() {
-      _trackingHint = 'Live tracking is active automatically.';
-      _isTrackingActive = true;
+      } else if (_isTrackingActive) {
+        _trackingHint = 'Live tracking is active.';
+      } else {
+        _trackingHint = 'Open GPS Tracker to enable live tracking safely.';
+      }
     });
   }
 

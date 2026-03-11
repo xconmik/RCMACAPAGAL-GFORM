@@ -47,11 +47,9 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
     if (widget.initialProfile != null) {
       _profile = widget.initialProfile;
       _status = _hasActiveBranch(widget.initialProfile!)
-          ? 'Profile loaded. Live tracking will start automatically after permission is granted.'
+          ? 'Profile loaded. Tap Enable Live Tracking when ready.'
           : 'Profile loaded. Select branch before tracking.';
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _enableAutomaticTracking();
-      });
+      _syncTrackingState();
     } else {
       _restoreSession();
     }
@@ -76,7 +74,7 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
     setState(() {
       _profile = profile;
       _status = _hasActiveBranch(profile)
-          ? 'Profile loaded. Live tracking will start automatically after permission is granted.'
+          ? 'Profile loaded. Tap Enable Live Tracking when ready.'
           : 'Profile loaded. Select branch before tracking.';
     });
 
@@ -109,11 +107,9 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
       setState(() {
         _profile = profile;
         _status = _hasActiveBranch(profile)
-            ? 'Logged in. Live tracking will start after permission is granted.'
+            ? 'Logged in. Tap Enable Live Tracking when ready.'
             : 'Logged in. Select your branch before tracking.';
       });
-
-      await _enableAutomaticTracking();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -238,37 +234,6 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
     });
   }
 
-  Future<void> _enableAutomaticTracking() async {
-    final profile = _profile;
-    if (profile == null || !_hasActiveBranch(profile)) {
-      await _syncTrackingState();
-      return;
-    }
-
-    if (profile.isGuest) {
-      if (!mounted) return;
-      setState(() {
-        _isTracking = false;
-        _status = 'Guest Mode active. Live tracking stays off.';
-      });
-      await _syncTrackingState();
-      return;
-    }
-
-    final allowed = await _ensureLocationPermission();
-    if (!allowed) return;
-
-    await InstallerLiveTrackingService.startTrackingForProfile(profile);
-    await _syncTrackingState();
-
-    if (!mounted) return;
-    setState(() {
-      _status =
-          'Permission granted. Live tracking is now active automatically.';
-      _error = null;
-    });
-  }
-
   bool _hasActiveBranch(InstallerProfile profile) {
     return profile.branch.trim().isNotEmpty;
   }
@@ -286,8 +251,6 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
       _status = 'Branch set to ${updatedProfile.branch}.';
       _error = null;
     });
-
-    await _enableAutomaticTracking();
   }
 
   @override
@@ -416,7 +379,7 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Note: after permission is granted, tracking can stay active automatically and uploads every 30 seconds or when movement reaches about 20 meters.',
+                'Note: tap Enable Live Tracking to start sending GPS updates every 30 seconds or when movement reaches about 20 meters.',
                 style: TextStyle(color: Colors.black54),
               ),
             ],

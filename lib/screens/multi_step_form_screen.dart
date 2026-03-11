@@ -75,6 +75,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
   bool _isUploadingAfter = false;
   bool _isUploadingCompletion = false;
   bool _isUploadingRefusal = false;
+  bool _isBootstrappingForm = true;
   bool _isLocationCatalogLoading = true;
   String? _locationCatalogError;
   String? _selectedMunicipality;
@@ -107,9 +108,20 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     } else if (_prefilledInstallerProfile != null) {
       _applyInstallerProfileDefaults(_prefilledInstallerProfile!);
     }
-    _loadLocationCatalog();
-    if (!_isEditMode) {
-      _restoreDraftIfAvailable();
+    _initializeFormState();
+  }
+
+  Future<void> _initializeFormState() async {
+    try {
+      await _loadLocationCatalog();
+      if (!_isEditMode) {
+        await _restoreDraftIfAvailable();
+      }
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isBootstrappingForm = false;
+      });
     }
   }
 
@@ -499,6 +511,11 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
   }
 
   Future<void> _goNext() async {
+    if (_isBootstrappingForm) {
+      _showError('Please wait while the form finishes loading.');
+      return;
+    }
+
     if (!_validateCurrentStep()) return;
 
     if (_currentStep < 10) {
@@ -939,6 +956,19 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
   }
 
   Widget _buildBranchStep() {
+    if (_isBootstrappingForm) {
+      return const StepCard(
+        title: 'Select Branch',
+        child: Column(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 12),
+            Text('Preparing form data...'),
+          ],
+        ),
+      );
+    }
+
     if (_isLocationCatalogLoading) {
       return const StepCard(
         title: 'Select Branch',
