@@ -25,18 +25,16 @@ flutter build web --release \
   --dart-define=GOOGLE_MAPS_WEB_ENABLED="${GOOGLE_MAPS_WEB_ENABLED:-false}"
 
 if [ "${GOOGLE_MAPS_WEB_ENABLED:-false}" = "true" ] && [ -n "${GOOGLE_MAPS_WEB_API_KEY:-}" ]; then
-  python3 - <<'PY'
-from pathlib import Path
-import os
+  node <<'NODE'
+const fs = require('fs');
 
-index_path = Path('build/web/index.html')
-content = index_path.read_text(encoding='utf-8')
-snippet = '\n  <script src="https://maps.googleapis.com/maps/api/js?key={}&libraries=marker"></script>\n'.format(
-    os.environ['GOOGLE_MAPS_WEB_API_KEY']
-  )
+const indexPath = 'build/web/index.html';
+const apiKey = process.env.GOOGLE_MAPS_WEB_API_KEY;
+const content = fs.readFileSync(indexPath, 'utf8');
+const snippet = `\n  <script src="https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=marker"></script>\n`;
 
-if 'maps.googleapis.com/maps/api/js' not in content:
-  content = content.replace('</body>', snippet + '</body>')
-  index_path.write_text(content, encoding='utf-8')
-PY
+if (!content.includes('maps.googleapis.com/maps/api/js')) {
+  fs.writeFileSync(indexPath, content.replace('</body>', `${snippet}</body>`), 'utf8');
+}
+NODE
 fi
