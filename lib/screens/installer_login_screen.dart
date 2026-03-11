@@ -41,7 +41,7 @@ class _InstallerLoginScreenState extends State<InstallerLoginScreen> {
     if (session != null) {
       final profile = InstallerProfile.fromJson(session);
       if (profile.installerId.trim().isNotEmpty) {
-        _openDashboard(profile);
+        _openDashboard(profile, replaceCurrent: true);
         return;
       }
     }
@@ -89,12 +89,20 @@ class _InstallerLoginScreenState extends State<InstallerLoginScreen> {
     _openDashboard(profile);
   }
 
-  void _openDashboard(InstallerProfile profile) {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(
-        builder: (_) => InstallerDashboardScreen(profile: profile),
-      ),
+  void _openDashboard(
+    InstallerProfile profile, {
+    bool replaceCurrent = false,
+  }) {
+    final route = MaterialPageRoute<void>(
+      builder: (_) => InstallerDashboardScreen(profile: profile),
     );
+
+    if (replaceCurrent) {
+      Navigator.of(context).pushReplacement(route);
+      return;
+    }
+
+    Navigator.of(context).push(route);
   }
 
   @override

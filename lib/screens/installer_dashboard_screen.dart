@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/installer_auth_service.dart';
+import '../services/installer_live_tracking_service.dart';
 import '../services/local_storage_service.dart';
 import 'installer_history_screen.dart';
 import 'installer_login_screen.dart';
@@ -29,11 +30,17 @@ class _InstallerDashboardScreenState extends State<InstallerDashboardScreen> {
 
   final LocalStorageService _localStorageService = LocalStorageService();
   late InstallerProfile _profile;
+  bool _isTrackingActive = false;
+  String? _trackingHint;
 
   @override
   void initState() {
     super.initState();
     _profile = widget.profile;
+    _syncTrackingState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _ensureAutoTracking();
+    });
   }
 
   bool get _hasActiveBranch => _profile.branch.trim().isNotEmpty;
@@ -48,9 +55,63 @@ class _InstallerDashboardScreenState extends State<InstallerDashboardScreen> {
     setState(() {
       _profile = updatedProfile;
     });
+
+    await _ensureAutoTracking();
+  }
+
+  Future<void> _syncTrackingState() async {
+    final active = await InstallerLiveTrackingService.isTrackingActive();
+    if (!mounted) return;
+    setState(() {
+      _isTrackingActive = active;
+    });
+  }
+
+  Future<void> _ensureAutoTracking() async {
+    if (!_hasActiveBranch) {
+      if (!mounted) return;
+      setState(() {
+        _trackingHint =
+            'Select an active branch to enable the form, history, and live tracking.';
+        _isTrackingActive = false;
+      });
+      return;
+    }
+
+    if (_profile.isGuest) {
+      if (!mounted) return;
+      setState(() {
+        _trackingHint =
+            'Guest Mode can use the form and history, but live tracking stays off.';
+        _isTrackingActive = false;
+      });
+      return;
+    }
+
+    final granted =
+        await InstallerLiveTrackingService.ensureLocationPermission();
+    if (!mounted) return;
+
+    if (!granted) {
+      setState(() {
+        _trackingHint =
+            'Allow location permission so live tracking starts automatically.';
+        _isTrackingActive = false;
+      });
+      return;
+    }
+
+    await InstallerLiveTrackingService.startTrackingForProfile(_profile);
+    if (!mounted) return;
+
+    setState(() {
+      _trackingHint = 'Live tracking is active automatically.';
+      _isTrackingActive = true;
+    });
   }
 
   Future<void> _logout() async {
+    await InstallerLiveTrackingService.stopTracking();
     await _localStorageService.clearInstallerSession();
     if (!mounted) return;
 
@@ -157,6 +218,44 @@ class _InstallerDashboardScreenState extends State<InstallerDashboardScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: (_isTrackingActive
+                              ? Colors.green.shade50
+                              : Colors.orange.shade50),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              _isTrackingActive
+                                  ? 'Live Tracking: ONLINE'
+                                  : 'Live Tracking: WAITING',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: _isTrackingActive
+                                    ? Colors.green.shade800
+                                    : Colors.orange.shade800,
+                              ),
+                            ),
+                            if (_trackingHint != null) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                _trackingHint!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
                       const Text(
                         'Bawal magkabit malapit sa SIMBAHAN, ESKWELAHAN, BARANGAY HALL, OSPITAL, AT PARKE. (100 meters away)',
                         textAlign: TextAlign.center,

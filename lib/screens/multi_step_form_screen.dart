@@ -30,6 +30,8 @@ class MultiStepFormScreen extends StatefulWidget {
 
 class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     with WidgetsBindingObserver {
+  static const int _maxImagesPerSection = 3;
+
   static const List<String> _brands = [
     'CAMEL',
     'WINSTON',
@@ -61,6 +63,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
   final TextEditingController _signageNameController = TextEditingController();
   final TextEditingController _storeOwnerController = TextEditingController();
   final TextEditingController _purokController = TextEditingController();
+  final TextEditingController _municipalityController = TextEditingController();
+  final TextEditingController _barangayController = TextEditingController();
   final TextEditingController _signageOtherController = TextEditingController();
   final TextEditingController _awningOtherController = TextEditingController();
   final TextEditingController _flangeOtherController = TextEditingController();
@@ -138,6 +142,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
           _formData.branch = null;
           _selectedMunicipality = null;
           _selectedBarangay = null;
+          _municipalityController.clear();
+          _barangayController.clear();
         }
       });
     } catch (e) {
@@ -158,6 +164,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     _signageNameController.dispose();
     _storeOwnerController.dispose();
     _purokController.dispose();
+    _municipalityController.dispose();
+    _barangayController.dispose();
     _signageOtherController.dispose();
     _awningOtherController.dispose();
     _flangeOtherController.dispose();
@@ -206,25 +214,35 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     await _localStorageService.saveDraft(_buildDraftPayload());
   }
 
-  CapturedImageData? _capturedImageFromDraft(dynamic raw) {
-    if (raw is! Map) return null;
+  List<CapturedImageData> _capturedImagesFromDraft(
+    dynamic raw, {
+    dynamic legacyRaw,
+  }) {
+    final results = <CapturedImageData>[];
 
-    final filePath = (raw['filePath'] ?? '').toString().trim();
-    if (filePath.isEmpty) return null;
+    if (raw is List) {
+      for (final item in raw.whereType<Map>()) {
+        final image = CapturedImageData.fromJson(item.cast<String, dynamic>());
+        if (image.filePath.trim().isNotEmpty) {
+          results.add(image);
+        }
+      }
+    } else if (raw is Map) {
+      final image = CapturedImageData.fromJson(raw.cast<String, dynamic>());
+      if (image.filePath.trim().isNotEmpty) {
+        results.add(image);
+      }
+    }
 
-    final latitude = double.tryParse((raw['latitude'] ?? '').toString()) ?? 0.0;
-    final longitude =
-        double.tryParse((raw['longitude'] ?? '').toString()) ?? 0.0;
-    final capturedAt =
-        DateTime.tryParse((raw['capturedAt'] ?? '').toString()) ??
-            DateTime.now();
+    if (results.isEmpty && legacyRaw is Map) {
+      final image =
+          CapturedImageData.fromJson(legacyRaw.cast<String, dynamic>());
+      if (image.filePath.trim().isNotEmpty) {
+        results.add(image);
+      }
+    }
 
-    return CapturedImageData(
-      filePath: filePath,
-      latitude: latitude,
-      longitude: longitude,
-      capturedAt: capturedAt,
-    );
+    return results.take(_maxImagesPerSection).toList();
   }
 
   Future<void> _restoreDraftIfAvailable() async {
@@ -300,11 +318,30 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
           (draft['flangeQuantityOther'] ?? '').toString().trim().isEmpty
               ? null
               : draft['flangeQuantityOther'].toString();
-      _formData.beforeImage = _capturedImageFromDraft(draft['beforeImage']);
-      _formData.afterImage = _capturedImageFromDraft(draft['afterImage']);
-      _formData.completionImage =
-          _capturedImageFromDraft(draft['completionImage']);
-      _formData.refusalImage = _capturedImageFromDraft(draft['refusalImage']);
+      _formData.beforeImages
+        ..clear()
+        ..addAll(_capturedImagesFromDraft(
+          draft['beforeImages'],
+          legacyRaw: draft['beforeImage'],
+        ));
+      _formData.afterImages
+        ..clear()
+        ..addAll(_capturedImagesFromDraft(
+          draft['afterImages'],
+          legacyRaw: draft['afterImage'],
+        ));
+      _formData.completionImages
+        ..clear()
+        ..addAll(_capturedImagesFromDraft(
+          draft['completionImages'],
+          legacyRaw: draft['completionImage'],
+        ));
+      _formData.refusalImages
+        ..clear()
+        ..addAll(_capturedImagesFromDraft(
+          draft['refusalImages'],
+          legacyRaw: draft['refusalImage'],
+        ));
 
       _formData.brands
         ..clear()
@@ -333,6 +370,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     _signageNameController.text = _formData.signageName ?? '';
     _storeOwnerController.text = _formData.storeOwnerName ?? '';
     _purokController.text = _formData.purok ?? '';
+    _municipalityController.text = _selectedMunicipality ?? '';
+    _barangayController.text = _selectedBarangay ?? '';
     _signageOtherController.text = _formData.signageQuantityOther ?? '';
     _awningOtherController.text = _formData.awningQuantityOther ?? '';
     _flangeOtherController.text = _formData.flangeQuantityOther ?? '';
@@ -378,10 +417,10 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     _formData.purok = null;
     _formData.barangay = null;
     _formData.municipality = null;
-    _formData.beforeImage = null;
-    _formData.afterImage = null;
-    _formData.completionImage = null;
-    _formData.refusalImage = null;
+    _formData.beforeImages.clear();
+    _formData.afterImages.clear();
+    _formData.completionImages.clear();
+    _formData.refusalImages.clear();
     _formData.signageQuantity = signageSelection.selection;
     _formData.signageQuantityOther = signageSelection.otherValue;
     _formData.awningQuantity = awningSelection.selection;
@@ -397,6 +436,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     _signageNameController.text = _formData.signageName ?? '';
     _storeOwnerController.text = _formData.storeOwnerName ?? '';
     _purokController.clear();
+    _municipalityController.clear();
+    _barangayController.clear();
     _signageOtherController.text = _formData.signageQuantityOther ?? '';
     _awningOtherController.text = _formData.awningQuantityOther ?? '';
     _flangeOtherController.text = _formData.flangeQuantityOther ?? '';
@@ -434,6 +475,29 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     }
   }
 
+  String? _resolveTypedSelection(
+    TextEditingController controller,
+    List<String> options, {
+    String? currentValue,
+  }) {
+    final typed = controller.text.trim();
+    if (typed.isEmpty) return null;
+
+    if (currentValue != null &&
+        currentValue.trim().toLowerCase() == typed.toLowerCase() &&
+        options.contains(currentValue)) {
+      return currentValue;
+    }
+
+    for (final option in options) {
+      if (option.toLowerCase() == typed.toLowerCase()) {
+        return option;
+      }
+    }
+
+    return null;
+  }
+
   Future<void> _goNext() async {
     if (!_validateCurrentStep()) return;
 
@@ -447,6 +511,37 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
         curve: Curves.easeInOut,
       );
     }
+  }
+
+  Future<void> _goBack() async {
+    if (_isSubmitting ||
+        _isUploadingBefore ||
+        _isUploadingAfter ||
+        _isUploadingCompletion ||
+        _isUploadingRefusal) {
+      _showError('Please wait for the current upload to finish.');
+      return;
+    }
+
+    if (_currentStep > 0) {
+      await _saveDraftSnapshot();
+      if (!mounted) return;
+
+      setState(() {
+        _currentStep -= 1;
+      });
+
+      await _pageController.animateToPage(
+        _currentStep,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeInOut,
+      );
+      return;
+    }
+
+    await _saveDraftSnapshot();
+    if (!mounted) return;
+    Navigator.of(context).pop();
   }
 
   bool _validateCurrentStep() {
@@ -496,12 +591,26 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
         _formData.storeOwnerName = _storeOwnerController.text.trim();
         return true;
       case 5:
-        if (_selectedMunicipality == null || _selectedMunicipality!.isEmpty) {
+        final municipalities = _municipalityOptions();
+        final resolvedMunicipality = _resolveTypedSelection(
+          _municipalityController,
+          municipalities,
+          currentValue: _selectedMunicipality,
+        );
+
+        if (resolvedMunicipality == null || resolvedMunicipality.isEmpty) {
           _showError('Please select a municipality.');
           return false;
         }
 
-        if (_selectedBarangay == null || _selectedBarangay!.isEmpty) {
+        final barangays = _barangayOptions(municipality: resolvedMunicipality);
+        final resolvedBarangay = _resolveTypedSelection(
+          _barangayController,
+          barangays,
+          currentValue: _selectedBarangay,
+        );
+
+        if (resolvedBarangay == null || resolvedBarangay.isEmpty) {
           _showError('Please select a barangay.');
           return false;
         }
@@ -512,8 +621,12 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
         }
 
         _formData.purok = _purokController.text.trim();
-        _formData.barangay = _selectedBarangay;
-        _formData.municipality = _selectedMunicipality;
+        _selectedMunicipality = resolvedMunicipality;
+        _selectedBarangay = resolvedBarangay;
+        _municipalityController.text = resolvedMunicipality;
+        _barangayController.text = resolvedBarangay;
+        _formData.barangay = resolvedBarangay;
+        _formData.municipality = resolvedMunicipality;
         _formData.completeAddress =
             'Purok ${_formData.purok}, ${_formData.barangay}, ${_formData.municipality}';
         return true;
@@ -575,7 +688,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
             : null;
         return true;
       case 10:
-        if (_requiresRefusalForm && _formData.refusalImage == null) {
+        if (_requiresRefusalForm && _formData.refusalImages.isEmpty) {
           _showError('Please upload the refusal form before submitting.');
           return false;
         }
@@ -586,12 +699,17 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
   }
 
   Future<void> _captureImage(String imageType, ImageSource source) async {
+    final images = _imagesForType(imageType);
+    if (images.length >= _maxImagesPerSection) {
+      _showError(
+        'Maximum of $_maxImagesPerSection images only for this section.',
+      );
+      return;
+    }
+
     try {
       setState(() {
-        if (imageType == 'before') _isUploadingBefore = true;
-        if (imageType == 'after') _isUploadingAfter = true;
-        if (imageType == 'completion') _isUploadingCompletion = true;
-        if (imageType == 'refusal') _isUploadingRefusal = true;
+        _setUploadingState(imageType, true);
       });
 
       final imageData = await _imageCaptureService.captureWithGps(
@@ -602,10 +720,9 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
       if (!mounted || imageData == null) return;
 
       setState(() {
-        if (imageType == 'before') _formData.beforeImage = imageData;
-        if (imageType == 'after') _formData.afterImage = imageData;
-        if (imageType == 'completion') _formData.completionImage = imageData;
-        if (imageType == 'refusal') _formData.refusalImage = imageData;
+        if (images.length < _maxImagesPerSection) {
+          images.add(imageData);
+        }
       });
     } catch (e) {
       if (!mounted) return;
@@ -613,24 +730,67 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     } finally {
       if (mounted) {
         setState(() {
-          if (imageType == 'before') _isUploadingBefore = false;
-          if (imageType == 'after') _isUploadingAfter = false;
-          if (imageType == 'completion') _isUploadingCompletion = false;
-          if (imageType == 'refusal') _isUploadingRefusal = false;
+          _setUploadingState(imageType, false);
         });
       }
     }
   }
 
+  List<CapturedImageData> _imagesForType(String imageType) {
+    switch (imageType) {
+      case 'before':
+        return _formData.beforeImages;
+      case 'after':
+        return _formData.afterImages;
+      case 'completion':
+        return _formData.completionImages;
+      case 'refusal':
+        return _formData.refusalImages;
+      default:
+        return _formData.beforeImages;
+    }
+  }
+
+  void _setUploadingState(String imageType, bool value) {
+    if (imageType == 'before') _isUploadingBefore = value;
+    if (imageType == 'after') _isUploadingAfter = value;
+    if (imageType == 'completion') _isUploadingCompletion = value;
+    if (imageType == 'refusal') _isUploadingRefusal = value;
+  }
+
+  void _removeImageAt(String imageType, int index) {
+    final images = _imagesForType(imageType);
+    if (index < 0 || index >= images.length) return;
+
+    setState(() {
+      images.removeAt(index);
+    });
+  }
+
+  Future<List<String>> _uploadImages(List<CapturedImageData> images) async {
+    final uploadedUrls = <String>[];
+    for (final image in images) {
+      uploadedUrls.add(await _uploadService.uploadImageToGoogleDrive(image));
+    }
+    return uploadedUrls;
+  }
+
+  String _joinUploadedUrls(List<String> urls) {
+    return urls
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .join('\n');
+  }
+
   Future<void> _submit() async {
-    if (_formData.beforeImage == null ||
-        _formData.afterImage == null ||
-        _formData.completionImage == null) {
+    if (_formData.beforeImages.isEmpty ||
+        _formData.afterImages.isEmpty ||
+        _formData.completionImages.isEmpty) {
       _showError('Please upload all required images before submitting.');
       return;
     }
 
-    if (_requiresRefusalForm && _formData.refusalImage == null) {
+    if (_requiresRefusalForm && _formData.refusalImages.isEmpty) {
       _showError('Please upload the refusal form before submitting.');
       return;
     }
@@ -640,23 +800,23 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     });
 
     try {
-      final beforeUrl =
-          await _uploadService.uploadImageToGoogleDrive(_formData.beforeImage!);
-      final afterUrl =
-          await _uploadService.uploadImageToGoogleDrive(_formData.afterImage!);
-      final completionUrl = await _uploadService
-          .uploadImageToGoogleDrive(_formData.completionImage!);
-      final refusalUrl = _formData.refusalImage == null
-          ? ''
-          : await _uploadService
-              .uploadImageToGoogleDrive(_formData.refusalImage!);
+      final beforeUrls = await _uploadImages(_formData.beforeImages);
+      final afterUrls = await _uploadImages(_formData.afterImages);
+      final completionUrls = await _uploadImages(_formData.completionImages);
+      final refusalUrls = _formData.refusalImages.isEmpty
+          ? const <String>[]
+          : await _uploadImages(_formData.refusalImages);
 
       final payload = _formData.toJson()
         ..addAll({
-          'beforeImageDriveUrl': beforeUrl,
-          'afterImageDriveUrl': afterUrl,
-          'completionImageDriveUrl': completionUrl,
-          'refusalImageDriveUrl': refusalUrl,
+          'beforeImageDriveUrl': _joinUploadedUrls(beforeUrls),
+          'afterImageDriveUrl': _joinUploadedUrls(afterUrls),
+          'completionImageDriveUrl': _joinUploadedUrls(completionUrls),
+          'refusalImageDriveUrl': _joinUploadedUrls(refusalUrls),
+          'beforeImageDriveUrls': beforeUrls,
+          'afterImageDriveUrls': afterUrls,
+          'completionImageDriveUrls': completionUrls,
+          'refusalImageDriveUrls': refusalUrls,
         });
 
       if (_isEditMode) {
@@ -740,10 +900,10 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     _formData.awningQuantityOther = null;
     _formData.flangeQuantity = null;
     _formData.flangeQuantityOther = null;
-    _formData.beforeImage = null;
-    _formData.afterImage = null;
-    _formData.completionImage = null;
-    _formData.refusalImage = null;
+    _formData.beforeImages.clear();
+    _formData.afterImages.clear();
+    _formData.completionImages.clear();
+    _formData.refusalImages.clear();
 
     _fullNameController.clear();
     _outletCodeController.clear();
@@ -752,6 +912,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     _purokController.clear();
     _selectedBarangay = null;
     _selectedMunicipality = null;
+    _municipalityController.clear();
+    _barangayController.clear();
     _signageOtherController.clear();
     _awningOtherController.clear();
     _flangeOtherController.clear();
@@ -841,6 +1003,8 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
                           _selectedBarangay = null;
                           _formData.municipality = null;
                           _formData.barangay = null;
+                          _municipalityController.clear();
+                          _barangayController.clear();
                         });
                       },
           ),
@@ -965,50 +1129,47 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
 
   Widget _buildLocationStep() {
     final municipalities = _municipalityOptions();
-    final selectedMunicipality = municipalities.contains(_selectedMunicipality)
-        ? _selectedMunicipality
-        : null;
+    final selectedMunicipality = _resolveTypedSelection(
+      _municipalityController,
+      municipalities,
+      currentValue: _selectedMunicipality,
+    );
     final barangays = _barangayOptions(municipality: selectedMunicipality);
-    final selectedBarangay =
-        barangays.contains(_selectedBarangay) ? _selectedBarangay : null;
+    final selectedBarangay = _resolveTypedSelection(
+      _barangayController,
+      barangays,
+      currentValue: _selectedBarangay,
+    );
 
     return StepCard(
       title: 'LOCATION DETAILS',
       child: Column(
         children: [
-          DropdownButtonFormField<String>(
-            initialValue: selectedMunicipality,
-            decoration: InputDecoration(
-              hintText: 'Select Municipality',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
+          _buildSearchableOptionField(
+            fieldKey: ValueKey(
+              'municipality-${_formData.branch ?? ''}-${selectedMunicipality ?? _municipalityController.text}-${municipalities.length}',
             ),
-            items: municipalities
-                .map((municipality) => DropdownMenuItem(
-                    value: municipality, child: Text(municipality)))
-                .toList(),
-            onChanged: (value) {
+            controller: _municipalityController,
+            hintText: 'Select or type Municipality',
+            options: municipalities,
+            onSelected: (value) {
               setState(() {
                 _selectedMunicipality = value;
                 _selectedBarangay = null;
+                _barangayController.clear();
               });
             },
           ),
           const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: selectedBarangay,
-            decoration: InputDecoration(
-              hintText: 'Select Barangay',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
+          _buildSearchableOptionField(
+            fieldKey: ValueKey(
+              'barangay-${selectedMunicipality ?? ''}-${selectedBarangay ?? _barangayController.text}-${barangays.length}',
             ),
-            items: barangays
-                .map((barangay) =>
-                    DropdownMenuItem(value: barangay, child: Text(barangay)))
-                .toList(),
-            onChanged: (value) {
+            controller: _barangayController,
+            hintText: 'Select or type Barangay',
+            options: barangays,
+            enabled: selectedMunicipality != null,
+            onSelected: (value) {
               setState(() {
                 _selectedBarangay = value;
               });
@@ -1031,13 +1192,108 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
     );
   }
 
+  Widget _buildSearchableOptionField({
+    required Key fieldKey,
+    required TextEditingController controller,
+    required String hintText,
+    required List<String> options,
+    required ValueChanged<String?> onSelected,
+    bool enabled = true,
+  }) {
+    return Autocomplete<String>(
+      key: fieldKey,
+      initialValue: TextEditingValue(text: controller.text),
+      optionsBuilder: (textEditingValue) {
+        if (!enabled) return const Iterable<String>.empty();
+
+        final query = textEditingValue.text.trim().toLowerCase();
+        if (query.isEmpty) return options;
+
+        return options.where(
+          (option) => option.toLowerCase().contains(query),
+        );
+      },
+      onSelected: (selection) {
+        controller.text = selection;
+        onSelected(selection);
+      },
+      fieldViewBuilder: (
+        context,
+        textEditingController,
+        focusNode,
+        onFieldSubmitted,
+      ) {
+        if (textEditingController.text != controller.text) {
+          textEditingController.value = TextEditingValue(
+            text: controller.text,
+            selection: TextSelection.collapsed(offset: controller.text.length),
+          );
+        }
+
+        return TextField(
+          controller: textEditingController,
+          focusNode: focusNode,
+          enabled: enabled,
+          onChanged: (value) {
+            controller.value = textEditingController.value;
+          },
+          onSubmitted: (_) {
+            controller.value = textEditingController.value;
+            onFieldSubmitted();
+          },
+          decoration: InputDecoration(
+            hintText: enabled ? hintText : 'Select Municipality first',
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            suffixIcon: const Icon(Icons.arrow_drop_down),
+          ),
+        );
+      },
+      optionsViewBuilder: (context, onSelected, filteredOptions) {
+        final items = filteredOptions.toList();
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(12),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 240, minWidth: 280),
+              child: items.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text('No matching results.'),
+                    )
+                  : ListView.builder(
+                      padding: EdgeInsets.zero,
+                      shrinkWrap: true,
+                      itemCount: items.length,
+                      itemBuilder: (context, index) {
+                        final item = items[index];
+                        return ListTile(
+                          dense: true,
+                          title: Text(item),
+                          onTap: () => onSelected(item),
+                        );
+                      },
+                    ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildUploadSection({
     required String title,
-    required CapturedImageData? imageData,
+    required List<CapturedImageData> images,
     required bool isUploading,
     required VoidCallback onCameraUpload,
     required VoidCallback onAlbumUpload,
+    required void Function(int index) onRemoveImage,
   }) {
+    final canAddMore = images.length < _maxImagesPerSection;
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -1054,32 +1310,41 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
               ),
             ),
             const SizedBox(height: 10),
-            if (imageData != null)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.file(
-                  File(imageData.filePath),
-                  height: 120,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  cacheWidth: 1080,
-                  filterQuality: FilterQuality.low,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      height: 120,
-                      width: double.infinity,
-                      alignment: Alignment.center,
-                      color: Colors.black12,
-                      child: const Text('Unable to preview image'),
-                    );
-                  },
-                ),
-              ),
-            if (imageData != null) const SizedBox(height: 10),
             Text(
-              imageData == null
+              images.isEmpty
                   ? 'No image captured yet.'
-                  : 'GPS: ${imageData.latitude.toStringAsFixed(6)}, ${imageData.longitude.toStringAsFixed(6)}',
+                  : '${images.length} of $_maxImagesPerSection images uploaded.',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              canAddMore
+                  ? 'You can upload ${_maxImagesPerSection - images.length} more image${_maxImagesPerSection - images.length == 1 ? '' : 's'}.'
+                  : 'Upload limit reached for this section.',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: canAddMore ? Colors.black54 : Colors.orange.shade800,
+              ),
+            ),
+            if (images.isNotEmpty) const SizedBox(height: 10),
+            if (images.isNotEmpty)
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  for (var index = 0; index < images.length; index++)
+                    _buildCapturedImageTile(
+                      imageData: images[index],
+                      onRemove: () => onRemoveImage(index),
+                    ),
+                ],
+              ),
+            if (images.isNotEmpty) const SizedBox(height: 10),
+            Text(
+              images.isEmpty
+                  ? 'Capture or select up to $_maxImagesPerSection images.'
+                  : 'Latest GPS: ${images.last.latitude.toStringAsFixed(6)}, ${images.last.longitude.toStringAsFixed(6)}',
             ),
             const SizedBox(height: 10),
             SizedBox(
@@ -1092,7 +1357,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
                     width: 220,
                     child: PrimaryActionButton(
                       label: 'USE CAMERA',
-                      onPressed: onCameraUpload,
+                      onPressed: canAddMore ? onCameraUpload : null,
                       isLoading: isUploading,
                     ),
                   ),
@@ -1100,7 +1365,7 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
                     width: 220,
                     child: PrimaryActionButton(
                       label: 'UPLOAD FROM ALBUM',
-                      onPressed: onAlbumUpload,
+                      onPressed: canAddMore ? onAlbumUpload : null,
                       isLoading: isUploading,
                     ),
                   ),
@@ -1109,6 +1374,53 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildCapturedImageTile({
+    required CapturedImageData imageData,
+    required VoidCallback onRemove,
+  }) {
+    return SizedBox(
+      width: 160,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.file(
+              File(imageData.filePath),
+              height: 120,
+              width: 160,
+              fit: BoxFit.cover,
+              cacheWidth: 720,
+              filterQuality: FilterQuality.low,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  height: 120,
+                  width: 160,
+                  alignment: Alignment.center,
+                  color: Colors.black12,
+                  child: const Text('Unable to preview image'),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'GPS: ${imageData.latitude.toStringAsFixed(4)}, ${imageData.longitude.toStringAsFixed(4)}',
+            style: const TextStyle(fontSize: 11),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: onRemove,
+              icon: const Icon(Icons.delete_outline, size: 16),
+              label: const Text('Remove'),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1124,13 +1436,15 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-        await _saveDraftSnapshot();
-        if (!mounted) return;
-        _showError(
-            'Progress saved. Use HOME button to avoid losing your step.');
+        await _goBack();
       },
       child: Scaffold(
         appBar: AppBar(
+          leading: IconButton(
+            onPressed: _goBack,
+            icon: const Icon(Icons.arrow_back),
+            tooltip: 'Back',
+          ),
           title: const Text('R.C. MACAPAGAL GFORM'),
         ),
         body: SafeArea(
@@ -1288,44 +1602,52 @@ class _MultiStepFormScreenState extends State<MultiStepFormScreen>
                           children: [
                             _buildUploadSection(
                               title: 'BEFORE (WITH GPS)',
-                              imageData: _formData.beforeImage,
+                              images: _formData.beforeImages,
                               isUploading: _isUploadingBefore,
                               onCameraUpload: () =>
                                   _captureImage('before', ImageSource.camera),
                               onAlbumUpload: () =>
                                   _captureImage('before', ImageSource.gallery),
+                              onRemoveImage: (index) =>
+                                  _removeImageAt('before', index),
                             ),
                             const SizedBox(height: 12),
                             _buildUploadSection(
                               title: 'AFTER (WITH GPS)',
-                              imageData: _formData.afterImage,
+                              images: _formData.afterImages,
                               isUploading: _isUploadingAfter,
                               onCameraUpload: () =>
                                   _captureImage('after', ImageSource.camera),
                               onAlbumUpload: () =>
                                   _captureImage('after', ImageSource.gallery),
+                              onRemoveImage: (index) =>
+                                  _removeImageAt('after', index),
                             ),
                             const SizedBox(height: 12),
                             _buildUploadSection(
                               title: 'COMPLETION FORM',
-                              imageData: _formData.completionImage,
+                              images: _formData.completionImages,
                               isUploading: _isUploadingCompletion,
                               onCameraUpload: () => _captureImage(
                                   'completion', ImageSource.camera),
                               onAlbumUpload: () => _captureImage(
                                   'completion', ImageSource.gallery),
+                              onRemoveImage: (index) =>
+                                  _removeImageAt('completion', index),
                             ),
                             const SizedBox(height: 12),
                             _buildUploadSection(
                               title: _requiresRefusalForm
                                   ? 'REFUSAL FORM (REQUIRED)'
                                   : 'REFUSAL FORM (OPTIONAL)',
-                              imageData: _formData.refusalImage,
+                              images: _formData.refusalImages,
                               isUploading: _isUploadingRefusal,
                               onCameraUpload: () =>
                                   _captureImage('refusal', ImageSource.camera),
                               onAlbumUpload: () =>
                                   _captureImage('refusal', ImageSource.gallery),
+                              onRemoveImage: (index) =>
+                                  _removeImageAt('refusal', index),
                             ),
                             const SizedBox(height: 16),
                             PrimaryActionButton(

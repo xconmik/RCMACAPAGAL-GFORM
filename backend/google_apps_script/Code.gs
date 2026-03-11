@@ -959,6 +959,20 @@ function _nested(obj, key) {
   return value === undefined || value === null ? '' : String(value);
 }
 
+function _imagePayloadValue(singleValue, listValue) {
+  if (Array.isArray(listValue)) {
+    const normalized = listValue
+      .map((item) => _string(item).trim())
+      .filter((item) => item);
+
+    if (normalized.length > 0) {
+      return normalized.join('\n');
+    }
+  }
+
+  return _string(singleValue).trim();
+}
+
 function createHistoricalBackupSnapshot() {
   const timestamp = Utilities.formatDate(
     new Date(),
@@ -990,6 +1004,22 @@ function createHistoricalBackupSnapshot() {
 function _buildInstallationRows(payload, timestamp) {
   const brandTokens = _splitBrands(payload.brands);
   const safeBrands = brandTokens.length > 0 ? brandTokens : [''];
+  const beforeImageValue = _imagePayloadValue(
+    payload.beforeImageDriveUrl,
+    payload.beforeImageDriveUrls
+  );
+  const afterImageValue = _imagePayloadValue(
+    payload.afterImageDriveUrl,
+    payload.afterImageDriveUrls
+  );
+  const completionImageValue = _imagePayloadValue(
+    payload.completionImageDriveUrl,
+    payload.completionImageDriveUrls
+  );
+  const refusalImageValue = _imagePayloadValue(
+    payload.refusalImageDriveUrl,
+    payload.refusalImageDriveUrls
+  );
 
   return safeBrands.map((brand) => [
     timestamp,
@@ -1005,10 +1035,10 @@ function _buildInstallationRows(payload, timestamp) {
     _resolvedQuantityValue(payload.signageQuantity, payload.signageQuantityOther),
     _resolvedQuantityValue(payload.awningQuantity, payload.awningQuantityOther),
     _resolvedQuantityValue(payload.flangeQuantity, payload.flangeQuantityOther),
-    _nested(payload.beforeImageDriveUrl),
-    _nested(payload.afterImageDriveUrl),
-    _nested(payload.completionImageDriveUrl),
-    _nested(payload.refusalImageDriveUrl),
+    beforeImageValue,
+    afterImageValue,
+    completionImageValue,
+    refusalImageValue,
   ]);
 }
 
@@ -1276,13 +1306,19 @@ function _setDriveFilePublicView(file) {
 }
 
 function _normalizeDriveImageUrl(url) {
-  const text = _string(url).trim();
-  if (!text) return '';
+  const items = _string(url)
+    .split(/\r?\n+/)
+    .map((item) => _string(item).trim())
+    .filter((item) => item);
 
-  const fileId = _extractDriveFileId(text);
-  if (!fileId) return text;
+  if (items.length <= 0) return '';
 
-  return _buildDrivePreviewUrl(fileId);
+  return items
+    .map((item) => {
+      const fileId = _extractDriveFileId(item);
+      return fileId ? _buildDrivePreviewUrl(fileId) : item;
+    })
+    .join('\n');
 }
 
 function _buildDrivePreviewUrl(fileId) {

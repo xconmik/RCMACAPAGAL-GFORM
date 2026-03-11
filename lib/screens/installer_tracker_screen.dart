@@ -5,7 +5,7 @@ import 'package:geolocator/geolocator.dart';
 
 import 'installer_history_screen.dart';
 import '../services/installer_auth_service.dart';
-import '../services/installer_tracking_service.dart';
+import '../services/installer_live_tracking_service.dart';
 import '../services/local_storage_service.dart';
 
 class InstallerTrackerScreen extends StatefulWidget {
@@ -28,33 +28,30 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
   ];
 
   final InstallerAuthService _authService = InstallerAuthService();
-  final InstallerTrackingService _trackingService = InstallerTrackingService();
   final LocalStorageService _localStorageService = LocalStorageService();
 
   final TextEditingController _installerIdController = TextEditingController();
   final TextEditingController _pinController = TextEditingController();
 
   InstallerProfile? _profile;
-  StreamSubscription<Position>? _positionSubscription;
   Position? _currentPosition;
-  Position? _lastSentPosition;
-  DateTime? _lastSentAt;
 
   bool _isLoggingIn = false;
   bool _isTracking = false;
-  String _sessionId = '';
   String? _status;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _sessionId = DateTime.now().millisecondsSinceEpoch.toString();
     if (widget.initialProfile != null) {
       _profile = widget.initialProfile;
       _status = _hasActiveBranch(widget.initialProfile!)
-          ? 'Profile loaded. Start shift tracking when ready.'
+          ? 'Profile loaded. Live tracking will start automatically after permission is granted.'
           : 'Profile loaded. Select branch before tracking.';
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _enableAutomaticTracking();
+      });
     } else {
       _restoreSession();
     }
@@ -62,7 +59,6 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
 
   @override
   void dispose() {
-    _positionSubscription?.cancel();
     _installerIdController.dispose();
     _pinController.dispose();
     super.dispose();
@@ -80,9 +76,11 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
     setState(() {
       _profile = profile;
       _status = _hasActiveBranch(profile)
-          ? 'Profile loaded. Start shift tracking when ready.'
+          ? 'Profile loaded. Live tracking will start automatically after permission is granted.'
           : 'Profile loaded. Select branch before tracking.';
     });
+
+    await _syncTrackingState();
   }
 
   Future<void> _login() async {
@@ -111,9 +109,11 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
       setState(() {
         _profile = profile;
         _status = _hasActiveBranch(profile)
-            ? 'Logged in. You can now start shift tracking.'
+            ? 'Logged in. Live tracking will start after permission is granted.'
             : 'Logged in. Select your branch before tracking.';
       });
+
+      await _enableAutomaticTracking();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -135,6 +135,7 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
 
     setState(() {
       _profile = null;
+      _currentPosition = null;
       _status = 'Logged out.';
       _error = null;
       _installerIdController.clear();
@@ -143,21 +144,9 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
   }
 
   Future<bool> _ensureLocationPermission() async {
-    final enabled = await Geolocator.isLocationServiceEnabled();
-    if (!enabled) {
-      setState(() {
-        _error = 'Please enable location services.';
-      });
-      return false;
-    }
-
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
+    final allowed =
+        await InstallerLiveTrackingService.ensureLocationPermission();
+    if (!allowed) {
       setState(() {
         _error = 'Location permission is required to start GPS tracking.';
       });
@@ -183,97 +172,101 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
       return;
     }
 
+    if (profile.isGuest) {
+      setState(() {
+        _error =
+            'Guest Mode cannot upload live tracking. Use a real installer login for GPS tracking.';
+        _status = 'Guest Mode active. Live tracking stays off.';
+      });
+      return;
+    }
+
     final allowed = await _ensureLocationPermission();
     if (!allowed) return;
 
-    await _positionSubscription?.cancel();
-
-    setState(() {
-      _isTracking = true;
-      _error = null;
-      _status = 'Tracking started. GPS points are being sent.';
-    });
-
-    _positionSubscription = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 10,
-      ),
-    ).listen(
-      (position) {
-        if (!mounted) return;
-        setState(() {
-          _currentPosition = position;
-        });
-        unawaited(_sendPoint(position, profile));
-      },
-      onError: (Object error) {
-        if (!mounted) return;
-        setState(() {
-          _error = 'Tracking error: $error';
-          _isTracking = false;
-        });
-      },
-    );
-  }
-
-  Future<void> _stopTracking() async {
-    await _positionSubscription?.cancel();
-    _positionSubscription = null;
+    await InstallerLiveTrackingService.startTrackingForProfile(profile);
+    await _syncTrackingState();
 
     if (!mounted) return;
     setState(() {
-      _isTracking = false;
+      _error = null;
+      _status = 'Tracking started. Live updates will upload automatically.';
+    });
+  }
+
+  Future<void> _stopTracking() async {
+    await InstallerLiveTrackingService.stopTracking();
+    await _syncTrackingState();
+
+    if (!mounted) return;
+    setState(() {
+      _currentPosition = null;
       _status = 'Tracking stopped.';
     });
   }
 
-  Future<void> _sendPoint(Position position, InstallerProfile profile) async {
-    final now = DateTime.now();
+  Future<void> _syncTrackingState() async {
+    final active = await InstallerLiveTrackingService.isTrackingActive();
+    final snapshot = await InstallerLiveTrackingService.loadTrackingSnapshot();
 
-    if (_lastSentAt != null &&
-        _lastSentPosition != null &&
-        now.difference(_lastSentAt!) < const Duration(seconds: 15)) {
-      final distance = Geolocator.distanceBetween(
-        _lastSentPosition!.latitude,
-        _lastSentPosition!.longitude,
-        position.latitude,
-        position.longitude,
-      );
+    if (!mounted) return;
+    setState(() {
+      _isTracking = active;
+      if (snapshot != null) {
+        _currentPosition = Position(
+          longitude:
+              double.tryParse((snapshot['longitude'] ?? '').toString()) ?? 0,
+          latitude:
+              double.tryParse((snapshot['latitude'] ?? '').toString()) ?? 0,
+          timestamp:
+              DateTime.tryParse((snapshot['trackedAt'] ?? '').toString()) ??
+                  DateTime.now(),
+          accuracy:
+              double.tryParse((snapshot['accuracy'] ?? '').toString()) ?? 0,
+          altitude: 0,
+          heading: 0,
+          speed: 0,
+          speedAccuracy: 0,
+          altitudeAccuracy: 0,
+          headingAccuracy: 0,
+          floor: null,
+          isMocked: false,
+        );
+      } else {
+        _currentPosition = null;
+      }
+    });
+  }
 
-      if (distance < 20) return;
+  Future<void> _enableAutomaticTracking() async {
+    final profile = _profile;
+    if (profile == null || !_hasActiveBranch(profile)) {
+      await _syncTrackingState();
+      return;
     }
 
-    try {
-      await _trackingService.submitTrackingPoint(
-        installerId: profile.installerId,
-        installerName: profile.installerName,
-        branch: profile.branch,
-        latitude: position.latitude,
-        longitude: position.longitude,
-        trackedAt: position.timestamp,
-        sessionId: _sessionId,
-        accuracy: position.accuracy,
-        speed: position.speed,
-        heading: position.heading,
-        altitude: position.altitude,
-        isMocked: position.isMocked,
-      );
-
-      _lastSentAt = now;
-      _lastSentPosition = position;
-
+    if (profile.isGuest) {
       if (!mounted) return;
       setState(() {
-        _status =
-            'Location sent at ${TimeOfDay.fromDateTime(now).format(context)}';
+        _isTracking = false;
+        _status = 'Guest Mode active. Live tracking stays off.';
       });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'Tracking upload issue: $e';
-      });
+      await _syncTrackingState();
+      return;
     }
+
+    final allowed = await _ensureLocationPermission();
+    if (!allowed) return;
+
+    await InstallerLiveTrackingService.startTrackingForProfile(profile);
+    await _syncTrackingState();
+
+    if (!mounted) return;
+    setState(() {
+      _status =
+          'Permission granted. Live tracking is now active automatically.';
+      _error = null;
+    });
   }
 
   bool _hasActiveBranch(InstallerProfile profile) {
@@ -293,6 +286,8 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
       _status = 'Branch set to ${updatedProfile.branch}.';
       _error = null;
     });
+
+    await _enableAutomaticTracking();
   }
 
   @override
@@ -377,8 +372,8 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
                 FilledButton(
                   onPressed: _isTracking ? _stopTracking : _startTracking,
                   child: Text(_isTracking
-                      ? 'Stop Shift Tracking'
-                      : 'Start Shift Tracking'),
+                      ? 'Stop Live Tracking'
+                      : 'Enable Live Tracking'),
                 ),
                 const SizedBox(height: 8),
                 OutlinedButton(
@@ -421,7 +416,7 @@ class _InstallerTrackerScreenState extends State<InstallerTrackerScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Note: tracking continues while app is open and shift tracking is ON.',
+                'Note: after permission is granted, tracking can stay active automatically and uploads every 30 seconds or when movement reaches about 20 meters.',
                 style: TextStyle(color: Colors.black54),
               ),
             ],

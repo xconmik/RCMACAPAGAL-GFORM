@@ -17,10 +17,42 @@ class InstallationFormData {
   String? awningQuantityOther;
   String? flangeQuantity;
   String? flangeQuantityOther;
-  CapturedImageData? beforeImage;
-  CapturedImageData? afterImage;
-  CapturedImageData? completionImage;
-  CapturedImageData? refusalImage;
+  final List<CapturedImageData> beforeImages = [];
+  final List<CapturedImageData> afterImages = [];
+  final List<CapturedImageData> completionImages = [];
+  final List<CapturedImageData> refusalImages = [];
+
+  CapturedImageData? get beforeImage =>
+      beforeImages.isEmpty ? null : beforeImages.last;
+  set beforeImage(CapturedImageData? value) {
+    beforeImages
+      ..clear()
+      ..addAll(value == null ? const [] : [value]);
+  }
+
+  CapturedImageData? get afterImage =>
+      afterImages.isEmpty ? null : afterImages.last;
+  set afterImage(CapturedImageData? value) {
+    afterImages
+      ..clear()
+      ..addAll(value == null ? const [] : [value]);
+  }
+
+  CapturedImageData? get completionImage =>
+      completionImages.isEmpty ? null : completionImages.last;
+  set completionImage(CapturedImageData? value) {
+    completionImages
+      ..clear()
+      ..addAll(value == null ? const [] : [value]);
+  }
+
+  CapturedImageData? get refusalImage =>
+      refusalImages.isEmpty ? null : refusalImages.last;
+  set refusalImage(CapturedImageData? value) {
+    refusalImages
+      ..clear()
+      ..addAll(value == null ? const [] : [value]);
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -44,6 +76,11 @@ class InstallationFormData {
       'afterImage': afterImage?.toJson(),
       'completionImage': completionImage?.toJson(),
       'refusalImage': refusalImage?.toJson(),
+      'beforeImages': beforeImages.map((item) => item.toJson()).toList(),
+      'afterImages': afterImages.map((item) => item.toJson()).toList(),
+      'completionImages':
+          completionImages.map((item) => item.toJson()).toList(),
+      'refusalImages': refusalImages.map((item) => item.toJson()).toList(),
     };
   }
 }

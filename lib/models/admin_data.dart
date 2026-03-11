@@ -59,6 +59,13 @@ class AdminSubmission {
   final String completionImageDriveUrl;
   final String refusalImageDriveUrl;
 
+  List<String> get beforeImageDriveUrls => _splitImageUrls(beforeImageDriveUrl);
+  List<String> get afterImageDriveUrls => _splitImageUrls(afterImageDriveUrl);
+  List<String> get completionImageDriveUrls =>
+      _splitImageUrls(completionImageDriveUrl);
+  List<String> get refusalImageDriveUrls =>
+      _splitImageUrls(refusalImageDriveUrl);
+
   factory AdminSubmission.fromJson(Map<String, dynamic> json) {
     return AdminSubmission(
       entryId: (json['entryId'] ?? '').toString(),
@@ -82,6 +89,17 @@ class AdminSubmission {
           (json['completionImageDriveUrl'] ?? '').toString(),
       refusalImageDriveUrl: (json['refusalImageDriveUrl'] ?? '').toString(),
     );
+  }
+
+  static List<String> _splitImageUrls(String raw) {
+    final normalized = raw.trim();
+    if (normalized.isEmpty) return const [];
+
+    return normalized
+        .split(RegExp(r'[\r\n]+'))
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
   }
 }
 

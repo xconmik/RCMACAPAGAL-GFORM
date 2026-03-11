@@ -9,7 +9,7 @@ $branchMap = [ordered]@{
   'DSO Tarlac' = @('Tarlac', 'Zambales')
   'DSO Pampanga' = @('Pampanga')
   'DSO Villasis' = @('Pangasinan')
-  'DSO Bantay' = @('Ilocos Norte', 'Ilocos Sur', 'La Union')
+  'DSO Bantay' = @('Ilocos Norte', 'Ilocos Sur', 'La Union', 'Abra')
 }
 
 $provinces = Invoke-RestMethod "$base/provinces.json"

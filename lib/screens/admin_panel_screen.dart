@@ -1483,14 +1483,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildImagePreviewTile('Before', entry.beforeImageDriveUrl),
+                  _buildImagePreviewGroup('Before', entry.beforeImageDriveUrls),
                   const SizedBox(height: 12),
-                  _buildImagePreviewTile('After', entry.afterImageDriveUrl),
+                  _buildImagePreviewGroup('After', entry.afterImageDriveUrls),
                   const SizedBox(height: 12),
-                  _buildImagePreviewTile(
-                      'Completion', entry.completionImageDriveUrl),
+                  _buildImagePreviewGroup(
+                      'Completion', entry.completionImageDriveUrls),
                   const SizedBox(height: 12),
-                  _buildImagePreviewTile('Refusal', entry.refusalImageDriveUrl),
+                  _buildImagePreviewGroup(
+                      'Refusal', entry.refusalImageDriveUrls),
                 ],
               ),
             ),
@@ -1503,6 +1504,37 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           ],
         );
       },
+    );
+  }
+
+  Widget _buildImagePreviewGroup(String label, List<String> urls) {
+    if (urls.isEmpty) {
+      return _buildImagePreviewTile(label, '');
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$label (${urls.length})',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (var index = 0; index < urls.length; index++)
+              SizedBox(
+                width: 220,
+                child: _buildImagePreviewTile(
+                  '$label ${index + 1}',
+                  urls[index],
+                ),
+              ),
+          ],
+        ),
+      ],
     );
   }
 
