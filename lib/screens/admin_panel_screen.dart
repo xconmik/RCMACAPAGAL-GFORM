@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map/flutter_map.dart' as osm;
+import 'package:google_maps_flutter/google_maps_flutter.dart' as gmaps;
 import 'package:intl/intl.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:latlong2/latlong.dart' as latlng;
 
 import '../models/admin_data.dart';
 import '../services/admin_service.dart';
@@ -22,6 +24,8 @@ class AdminPanelScreen extends StatefulWidget {
 
 class _AdminPanelScreenState extends State<AdminPanelScreen> {
   static const Duration _autoRefreshInterval = Duration(seconds: 10);
+  static const bool _useGoogleMapsWeb =
+      bool.fromEnvironment('GOOGLE_MAPS_WEB_ENABLED', defaultValue: false);
 
   static const List<String> _branches = [
     'ALL',
@@ -1874,42 +1878,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 height: 360,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(10),
-                  child: FlutterMap(
-                    options: MapOptions(
-                      initialCenter: LatLng(
-                        points.first.latitude,
-                        points.first.longitude,
-                      ),
-                      initialZoom: 11,
-                    ),
-                    children: [
-                      TileLayer(
-                        urlTemplate:
-                            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-                        userAgentPackageName: 'com.rcmacapagal.gform',
-                      ),
-                      MarkerLayer(
-                        markers: points
-                            .map(
-                              (point) => Marker(
-                                point: LatLng(point.latitude, point.longitude),
-                                width: 44,
-                                height: 44,
-                                child: Tooltip(
-                                  message:
-                                      '${point.installerName} (${point.branch})\n${_formatTimestamp(point.trackedAt.isNotEmpty ? point.trackedAt : point.scriptTimestamp)}',
-                                  child: const Icon(
-                                    Icons.location_on,
-                                    color: Colors.red,
-                                    size: 34,
-                                  ),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                    ],
-                  ),
+                  child: _buildMapWidget(points),
                 ),
               ),
               const SizedBox(height: 10),
@@ -1940,6 +1909,75 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildMapWidget(List<AdminTrackingLocation> points) {
+    if (kIsWeb && _useGoogleMapsWeb) {
+      return gmaps.GoogleMap(
+        initialCameraPosition: gmaps.CameraPosition(
+          target: gmaps.LatLng(points.first.latitude, points.first.longitude),
+          zoom: 14,
+        ),
+        mapType: gmaps.MapType.hybrid,
+        myLocationButtonEnabled: false,
+        zoomControlsEnabled: true,
+        markers: points
+            .map(
+              (point) => gmaps.Marker(
+                markerId: gmaps.MarkerId(
+                  '${point.installerName}-${point.trackedAt}-${point.latitude}-${point.longitude}',
+                ),
+                position: gmaps.LatLng(point.latitude, point.longitude),
+                infoWindow: gmaps.InfoWindow(
+                  title: '${point.installerName} (${point.branch})',
+                  snippet: _formatTimestamp(
+                    point.trackedAt.isNotEmpty
+                        ? point.trackedAt
+                        : point.scriptTimestamp,
+                  ),
+                ),
+              ),
+            )
+            .toSet(),
+      );
+    }
+
+    return osm.FlutterMap(
+      options: osm.MapOptions(
+        initialCenter: latlng.LatLng(
+          points.first.latitude,
+          points.first.longitude,
+        ),
+        initialZoom: 11,
+      ),
+      children: [
+        osm.TileLayer(
+          urlTemplate:
+              'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+          userAgentPackageName: 'com.rcmacapagal.gform',
+        ),
+        osm.MarkerLayer(
+          markers: points
+              .map(
+                (point) => osm.Marker(
+                  point: latlng.LatLng(point.latitude, point.longitude),
+                  width: 44,
+                  height: 44,
+                  child: Tooltip(
+                    message:
+                        '${point.installerName} (${point.branch})\n${_formatTimestamp(point.trackedAt.isNotEmpty ? point.trackedAt : point.scriptTimestamp)}',
+                    child: const Icon(
+                      Icons.location_on,
+                      color: Colors.red,
+                      size: 34,
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+      ],
     );
   }
 
