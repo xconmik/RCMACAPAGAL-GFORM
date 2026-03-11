@@ -24,11 +24,11 @@ For a ready-to-deploy Google Apps Script backend (Drive upload + Sheets append),
 ```bash
 flutter run \
 	--dart-define=GDRIVE_UPLOAD_MODE=apps_script \
-	--dart-define=GDRIVE_UPLOAD_URL=https://script.google.com/macros/s/AKfycbzg5-nrnOvnlxlg5Zin8Vk3-kfmq6BuDcFQuTawrAslI5ou1VkvQFdtYoMfx6Zc78wZlw/exec?action=uploadImage \
-	--dart-define=GSHEETS_SUBMIT_URL=https://script.google.com/macros/s/AKfycbzg5-nrnOvnlxlg5Zin8Vk3-kfmq6BuDcFQuTawrAslI5ou1VkvQFdtYoMfx6Zc78wZlw/exec?action=submitForm \
-	--dart-define=ADMIN_DATA_URL=https://script.google.com/macros/s/AKfycbzg5-nrnOvnlxlg5Zin8Vk3-kfmq6BuDcFQuTawrAslI5ou1VkvQFdtYoMfx6Zc78wZlw/exec?action=adminData \
-	--dart-define=INSTALLER_TRACK_URL=https://script.google.com/macros/s/AKfycbzg5-nrnOvnlxlg5Zin8Vk3-kfmq6BuDcFQuTawrAslI5ou1VkvQFdtYoMfx6Zc78wZlw/exec?action=trackInstallerLocation \
-	--dart-define=INSTALLER_LOGIN_URL=https://script.google.com/macros/s/AKfycbzg5-nrnOvnlxlg5Zin8Vk3-kfmq6BuDcFQuTawrAslI5ou1VkvQFdtYoMfx6Zc78wZlw/exec?action=installerLogin \
+	--dart-define=GDRIVE_UPLOAD_URL=https://script.google.com/macros/s/AKfycbzJnVEldOIW8jmmM5dsBhmER0w88n5Lrxqiu5C5aB9BR4swMSd5ngdZCLM5uTQ-NLMNYQ/exec?action=uploadImage \
+	--dart-define=GSHEETS_SUBMIT_URL=https://script.google.com/macros/s/AKfycbzJnVEldOIW8jmmM5dsBhmER0w88n5Lrxqiu5C5aB9BR4swMSd5ngdZCLM5uTQ-NLMNYQ/exec?action=submitForm \
+	--dart-define=ADMIN_DATA_URL=https://script.google.com/macros/s/AKfycbzJnVEldOIW8jmmM5dsBhmER0w88n5Lrxqiu5C5aB9BR4swMSd5ngdZCLM5uTQ-NLMNYQ/exec?action=adminData \
+	--dart-define=INSTALLER_TRACK_URL=https://script.google.com/macros/s/AKfycbzJnVEldOIW8jmmM5dsBhmER0w88n5Lrxqiu5C5aB9BR4swMSd5ngdZCLM5uTQ-NLMNYQ/exec?action=trackInstallerLocation \
+	--dart-define=INSTALLER_LOGIN_URL=https://script.google.com/macros/s/AKfycbzJnVEldOIW8jmmM5dsBhmER0w88n5Lrxqiu5C5aB9BR4swMSd5ngdZCLM5uTQ-NLMNYQ/exec?action=installerLogin \
 	--dart-define=GOOGLE_MAPS_WEB_ENABLED=true
 ```
 

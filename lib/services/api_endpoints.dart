@@ -1,6 +1,6 @@
 class ApiEndpoints {
   static const String _defaultWebAppUrl =
-      'https://script.google.com/macros/s/AKfycbzg5-nrnOvnlxlg5Zin8Vk3-kfmq6BuDcFQuTawrAslI5ou1VkvQFdtYoMfx6Zc78wZlw/exec';
+      'https://script.google.com/macros/s/AKfycbzJnVEldOIW8jmmM5dsBhmER0w88n5Lrxqiu5C5aB9BR4swMSd5ngdZCLM5uTQ-NLMNYQ/exec';
 
   static const String _googleDriveUploadUrlEnv = String.fromEnvironment(
     'GDRIVE_UPLOAD_URL',
