@@ -1946,16 +1946,67 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 
+  List<latlng.LatLng> _trackingCoordinates(List<AdminTrackingLocation> points) {
+    return points
+        .map((point) => latlng.LatLng(point.latitude, point.longitude))
+        .toList();
+  }
+
+  gmaps.LatLngBounds _googleTrackingBounds(
+    List<AdminTrackingLocation> points,
+  ) {
+    var south = points.first.latitude;
+    var north = points.first.latitude;
+    var west = points.first.longitude;
+    var east = points.first.longitude;
+
+    for (final point in points.skip(1)) {
+      if (point.latitude < south) south = point.latitude;
+      if (point.latitude > north) north = point.latitude;
+      if (point.longitude < west) west = point.longitude;
+      if (point.longitude > east) east = point.longitude;
+    }
+
+    if (south == north) {
+      south -= 0.005;
+      north += 0.005;
+    }
+
+    if (west == east) {
+      west -= 0.005;
+      east += 0.005;
+    }
+
+    return gmaps.LatLngBounds(
+      southwest: gmaps.LatLng(south, west),
+      northeast: gmaps.LatLng(north, east),
+    );
+  }
+
   Widget _buildMapWidget(List<AdminTrackingLocation> points) {
+    final coordinates = _trackingCoordinates(points);
+
     if (kIsWeb && _useGoogleMapsWeb) {
       return gmaps.GoogleMap(
         initialCameraPosition: gmaps.CameraPosition(
           target: gmaps.LatLng(points.first.latitude, points.first.longitude),
-          zoom: 14,
+          zoom: points.length == 1 ? 14 : 5,
         ),
         mapType: gmaps.MapType.hybrid,
         myLocationButtonEnabled: false,
         zoomControlsEnabled: true,
+        onMapCreated: (controller) {
+          if (points.length <= 1) return;
+
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            controller.animateCamera(
+              gmaps.CameraUpdate.newLatLngBounds(
+                _googleTrackingBounds(points),
+                48,
+              ),
+            );
+          });
+        },
         markers: points
             .map(
               (point) => gmaps.Marker(
@@ -1979,11 +2030,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
     return osm.FlutterMap(
       options: osm.MapOptions(
-        initialCenter: latlng.LatLng(
-          points.first.latitude,
-          points.first.longitude,
-        ),
-        initialZoom: 11,
+        initialCenter: coordinates.first,
+        initialZoom: points.length == 1 ? 14 : 11,
+        initialCameraFit: points.length <= 1
+            ? null
+            : osm.CameraFit.coordinates(
+                coordinates: coordinates,
+                padding: const EdgeInsets.all(40),
+                maxZoom: 15,
+              ),
       ),
       children: [
         osm.TileLayer(
